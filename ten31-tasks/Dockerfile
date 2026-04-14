@@ -3,6 +3,7 @@ FROM node:20-alpine AS frontend-build
 WORKDIR /app
 
 RUN npm init -y && \
+    npm pkg set type=module && \
     npm install --legacy-peer-deps vite@5 @vitejs/plugin-react react react-dom
 
 COPY <<'VITECONFIG' vite.config.js
