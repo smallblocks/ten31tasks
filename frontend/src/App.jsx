@@ -10,7 +10,7 @@ const BG = "#0c0b09";
 const SURFACE = "#161412";
 const BORDER = "#2a2620";
 const TEXT = "#c9bfad";
-const TEXT_DIM = "#8a7f6f";
+const TEXT_DIM = "#c0b5a3";
 const WHITE = "#f0ebe0";
 const RED_DIM = "#3a1515";
 
