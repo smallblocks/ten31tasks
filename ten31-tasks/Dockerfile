@@ -4,7 +4,7 @@ WORKDIR /app
 
 RUN npm init -y && \
     npm pkg set type=module && \
-    npm install --legacy-peer-deps vite@5 @vitejs/plugin-react react react-dom
+    npm install vite@6 @vitejs/plugin-react@latest react react-dom
 
 COPY <<'VITECONFIG' vite.config.js
 import { defineConfig } from 'vite'
