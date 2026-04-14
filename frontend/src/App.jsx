@@ -207,11 +207,8 @@ function Homepage({ team, onSelectMember, onGoTeam }) {
       {/* Team Accountability */}
       <section style={{ marginBottom: 40 }}>
         <h2 style={{ fontFamily: SERIF, fontSize: 22, color: WHITE, marginBottom: 16, borderBottom: `1px solid ${BORDER}`, paddingBottom: 12 }}>Team Accountability</h2>
-        <p style={{ fontFamily: SANS, fontSize: 15, color: TEXT, lineHeight: 1.7, marginBottom: 12 }}>
-          The team board shows everyone's daily commitment, progress, streaks, and completion rates. No managers hovering — just natural transparency. When you can see that your teammates committed their six and are grinding through them, you don't want to be the one who didn't show up.
-        </p>
         <p style={{ fontFamily: SANS, fontSize: 15, color: TEXT, lineHeight: 1.7 }}>
-          It's a calendar heatmap of proof-of-work. Green days are days you showed up and delivered. Red days are days you didn't commit. Over time, the pattern speaks louder than any status meeting.
+          The team board shows what everyone is working on. Full visibility, so we are all moving the same direction. Your six tasks should be the highest use of your time. The work that compounds and gets us to where we need to be. The proof-of-work calendar keeps you honest to the team and to yourself. Green days are days you showed up. Red days are days you didn't.
         </p>
       </section>
 
