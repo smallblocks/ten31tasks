@@ -7,11 +7,11 @@ const SANS = "'DM Sans','Helvetica Neue','Segoe UI',sans-serif";
 const GOLD = "#c8a44e";
 const GOLD_DIM = "rgba(200,164,78,0.15)";
 const BG = "#0c0b09";
-const SURFACE = "#141310";
-const BORDER = "#1f1d18";
-const TEXT = "#a89e8c";
-const TEXT_DIM = "#5a5347";
-const WHITE = "#e8e0d0";
+const SURFACE = "#161412";
+const BORDER = "#2a2620";
+const TEXT = "#c9bfad";
+const TEXT_DIM = "#8a7f6f";
+const WHITE = "#f0ebe0";
 const RED_DIM = "#3a1515";
 
 // ─── API helpers ────────────────────────────────────────────────────────────
@@ -58,6 +58,8 @@ const TeamIcon = () => <svg width="16" height="16" viewBox="0 0 16 16" fill="non
 const XIcon = () => <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><line x1="3" y1="3" x2="11" y2="11"/><line x1="11" y1="3" x2="3" y2="11"/></svg>;
 const SyncIcon = ({ syncing }) => <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke={syncing ? GOLD : TEXT_DIM} strokeWidth="1.2" strokeLinecap="round" style={syncing ? { animation: "spin 1s linear infinite" } : {}}><path d="M1 6a5 5 0 019-2"/><path d="M11 6a5 5 0 01-9 2"/><polyline points="1 2 1 6 5 6" style={{ fill: "none" }}/><polyline points="11 10 11 6 7 6" style={{ fill: "none" }}/></svg>;
 const BellIcon = ({ active }) => <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke={active ? GOLD : TEXT_DIM} strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><path d="M4 6a4 4 0 018 0c0 4 2 5 2 5H2s2-1 2-5"/><path d="M6.5 13a1.5 1.5 0 003 0"/>{active && <circle cx="12" cy="3" r="2" fill={GOLD} stroke="none"/>}</svg>;
+const MoveUpIcon = () => <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M7 11V3"/><path d="M3 6l4-4 4 4"/></svg>;
+const MoveDownIcon = () => <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M7 3v8"/><path d="M3 8l4 4 4-4"/></svg>;
 
 // ─── Push Notification Helpers ──────────────────────────────────────────────
 function urlBase64ToUint8Array(base64String) {
@@ -588,6 +590,19 @@ export default function App() {
     updateDay(selectedDate, d, patch.done !== undefined);
   };
 
+  const moveItem = (idx, direction) => {
+    if (!canEdit) return;
+    const newIdx = idx + direction;
+    if (newIdx < 0 || newIdx > 5) return;
+    const d = structuredClone(activeDays[selectedDate] || blankDay());
+    const temp = d.items[idx];
+    d.items[idx] = d.items[newIdx];
+    d.items[newIdx] = temp;
+    updateDay(selectedDate, d, true);
+    // Move focus to where the item went
+    setTimeout(() => inputRefs.current[newIdx]?.focus(), 50);
+  };
+
   const lockList = () => {
     if (!canEdit) return;
     const d = structuredClone(activeDays[selectedDate] || blankDay());
@@ -801,13 +816,43 @@ export default function App() {
                         )}
                       </div>
                     ) : (
-                      <input
-                        ref={el => (inputRefs.current[idx] = el)}
-                        style={{ flex: 1, background: "transparent", border: "none", outline: "none", color: WHITE, fontFamily: SANS, fontSize: 15, padding: 0 }}
-                        value={item.text} onChange={e => updateItem(idx, { text: e.target.value })}
-                        onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); if (idx < 5) inputRefs.current[idx + 1]?.focus(); } }}
-                        placeholder={idx === 0 ? "Most important thing…" : `Task ${idx + 1}`} spellCheck={false}
-                      />
+                      <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 6 }}>
+                        <input
+                          ref={el => (inputRefs.current[idx] = el)}
+                          style={{ flex: 1, background: "transparent", border: "none", outline: "none", color: WHITE, fontFamily: SANS, fontSize: 15, padding: 0 }}
+                          value={item.text} onChange={e => updateItem(idx, { text: e.target.value })}
+                          onKeyDown={e => {
+                            if (e.key === "Enter") { e.preventDefault(); if (idx < 5) inputRefs.current[idx + 1]?.focus(); }
+                            if (e.key === "ArrowUp" && e.altKey) { e.preventDefault(); moveItem(idx, -1); }
+                            if (e.key === "ArrowDown" && e.altKey) { e.preventDefault(); moveItem(idx, 1); }
+                          }}
+                          placeholder={idx === 0 ? "Most important thing…" : `Task ${idx + 1}`} spellCheck={false}
+                        />
+                        {item.text && (
+                          <div style={{ display: "flex", flexDirection: "column", gap: 1, flexShrink: 0 }}>
+                            <button onClick={() => moveItem(idx, -1)} disabled={idx === 0}
+                              style={{
+                                background: "transparent", border: "none", color: idx === 0 ? `${BORDER}` : TEXT_DIM,
+                                cursor: idx === 0 ? "default" : "pointer", padding: 2, display: "flex",
+                                borderRadius: 3, lineHeight: 0,
+                              }}
+                              onMouseEnter={e => { if (idx > 0) e.target.style.color = GOLD; }}
+                              onMouseLeave={e => { e.target.style.color = idx === 0 ? BORDER : TEXT_DIM; }}>
+                              <MoveUpIcon />
+                            </button>
+                            <button onClick={() => moveItem(idx, 1)} disabled={idx === 5}
+                              style={{
+                                background: "transparent", border: "none", color: idx === 5 ? `${BORDER}` : TEXT_DIM,
+                                cursor: idx === 5 ? "default" : "pointer", padding: 2, display: "flex",
+                                borderRadius: 3, lineHeight: 0,
+                              }}
+                              onMouseEnter={e => { if (idx < 5) e.target.style.color = GOLD; }}
+                              onMouseLeave={e => { e.target.style.color = idx === 5 ? BORDER : TEXT_DIM; }}>
+                              <MoveDownIcon />
+                            </button>
+                          </div>
+                        )}
+                      </div>
                     )}
                   </li>
                 );

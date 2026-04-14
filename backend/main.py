@@ -1,13 +1,16 @@
 """
 Ten31 Tasks — Backend API
-FastAPI + SQLite + Web Push. Every mutation writes immediately. No save button.
+FastAPI + SQLite + Web Push + Built-in Reminder Scheduler.
+Every mutation writes immediately. No save button.
 """
 import json
 import os
 import sqlite3
+import threading
+import time
 import traceback
 from contextlib import contextmanager
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Optional
 
@@ -43,12 +46,9 @@ def init_vapid():
         print(f"VAPID keys loaded from {VAPID_KEY_PATH}")
         return
     
-    # Generate new ECDSA P-256 keys using cryptography directly
     private_key = ec.generate_private_key(ec.SECP256R1())
-    
     Path(VAPID_KEY_PATH).mkdir(parents=True, exist_ok=True)
     
-    # Save private key PEM
     priv_pem = private_key.private_bytes(
         encoding=serialization.Encoding.PEM,
         format=serialization.PrivateFormat.PKCS8,
@@ -56,7 +56,6 @@ def init_vapid():
     ).decode('utf-8')
     priv_path.write_text(priv_pem)
     
-    # Save public key as base64url uncompressed point (applicationServerKey)
     raw = private_key.public_key().public_bytes(
         encoding=serialization.Encoding.X962,
         format=serialization.PublicFormat.UncompressedPoint,
@@ -98,6 +97,35 @@ def init_db():
                 UNIQUE(slug, subscription)
             )
         """)
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS settings (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL
+            )
+        """)
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS reminder_log (
+                slug TEXT NOT NULL,
+                date TEXT NOT NULL,
+                checkpoint TEXT NOT NULL,
+                sent_at TEXT NOT NULL DEFAULT (datetime('now')),
+                PRIMARY KEY (slug, date, checkpoint)
+            )
+        """)
+        # Default settings
+        defaults = {
+            "reminder_timezone": "America/Chicago",
+            "reminder_morning_hour": "9",
+            "reminder_afternoon_hour": "15",
+            "reminder_evening_hour": "20",
+            "reminder_skip_weekends": "false",
+            "reminders_enabled": "true",
+        }
+        for k, v in defaults.items():
+            db.execute(
+                "INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)",
+                (k, v)
+            )
         db.commit()
 
 
@@ -115,6 +143,7 @@ def get_db():
 def startup():
     init_db()
     init_vapid()
+    start_reminder_scheduler()
 
 
 # ─── Models ──────────────────────────────────────────────────────────────────
@@ -136,7 +165,6 @@ class DayData(BaseModel):
 
 
 class DayUpdate(BaseModel):
-    """Partial update — only send the fields that changed."""
     items: Optional[list[DayItem]] = None
     locked: Optional[bool] = None
     lockedAt: Optional[str] = None
@@ -146,6 +174,15 @@ class DayUpdate(BaseModel):
 class PushSubscription(BaseModel):
     slug: str
     subscription: dict
+
+
+class SettingsUpdate(BaseModel):
+    reminder_timezone: Optional[str] = None
+    reminder_morning_hour: Optional[int] = None
+    reminder_afternoon_hour: Optional[int] = None
+    reminder_evening_hour: Optional[int] = None
+    reminder_skip_weekends: Optional[bool] = None
+    reminders_enabled: Optional[bool] = None
 
 
 # ─── Team endpoints ──────────────────────────────────────────────────────────
@@ -177,6 +214,7 @@ def remove_member(slug: str):
         db.execute("DELETE FROM team WHERE slug = ?", (slug,))
         db.execute("DELETE FROM days WHERE slug = ?", (slug,))
         db.execute("DELETE FROM push_subscriptions WHERE slug = ?", (slug,))
+        db.execute("DELETE FROM reminder_log WHERE slug = ?", (slug,))
         db.commit()
     return {"deleted": slug}
 
@@ -184,7 +222,6 @@ def remove_member(slug: str):
 # ─── Day endpoints ───────────────────────────────────────────────────────────
 @app.get("/api/days/{slug}")
 def get_user_days(slug: str):
-    """Return all days for a user as {date: DayData}."""
     with get_db() as db:
         rows = db.execute("SELECT date, data FROM days WHERE slug = ?", (slug,)).fetchall()
         result = {}
@@ -195,7 +232,6 @@ def get_user_days(slug: str):
 
 @app.get("/api/days/{slug}/{day_date}")
 def get_day(slug: str, day_date: str):
-    """Return a single day."""
     with get_db() as db:
         row = db.execute("SELECT data FROM days WHERE slug = ? AND date = ?", (slug, day_date)).fetchone()
         if row:
@@ -208,12 +244,7 @@ def get_day(slug: str, day_date: str):
 
 @app.put("/api/days/{slug}/{day_date}")
 def update_day(slug: str, day_date: str, update: DayUpdate):
-    """
-    Merge update into existing day data. Called on every keystroke / check / lock.
-    Uses INSERT OR REPLACE for atomic upsert.
-    """
     with get_db() as db:
-        # Get existing
         row = db.execute("SELECT data FROM days WHERE slug = ? AND date = ?", (slug, day_date)).fetchone()
         if row:
             existing = json.loads(row["data"])
@@ -223,7 +254,6 @@ def update_day(slug: str, day_date: str, update: DayUpdate):
                 "locked": False, "lockedAt": None, "reflection": ""
             }
 
-        # Merge
         update_dict = update.dict(exclude_none=True)
         if "items" in update_dict:
             existing["items"] = [item.dict() if hasattr(item, 'dict') else item for item in update_dict["items"]]
@@ -245,13 +275,11 @@ def update_day(slug: str, day_date: str, update: DayUpdate):
 # ─── Push Subscription endpoints ─────────────────────────────────────────────
 @app.get("/api/push/vapid-public-key")
 def get_vapid_public_key():
-    """Return the VAPID public key for the browser to subscribe."""
     return {"publicKey": vapid_public_key}
 
 
 @app.post("/api/push/subscribe")
 def subscribe_push(sub: PushSubscription):
-    """Register a push subscription for a team member."""
     sub_json = json.dumps(sub.subscription, sort_keys=True)
     with get_db() as db:
         try:
@@ -267,26 +295,52 @@ def subscribe_push(sub: PushSubscription):
 
 @app.delete("/api/push/subscribe/{slug}")
 def unsubscribe_push(slug: str):
-    """Remove all push subscriptions for a member."""
     with get_db() as db:
         db.execute("DELETE FROM push_subscriptions WHERE slug = ?", (slug,))
         db.commit()
     return {"status": "unsubscribed", "slug": slug}
 
 
+# ─── Settings endpoints ─────────────────────────────────────────────────────
+@app.get("/api/settings")
+def get_settings():
+    with get_db() as db:
+        rows = db.execute("SELECT key, value FROM settings").fetchall()
+        settings = {r["key"]: r["value"] for r in rows}
+    return {
+        "timezone": settings.get("reminder_timezone", "America/Chicago"),
+        "morning_hour": int(settings.get("reminder_morning_hour", "9")),
+        "afternoon_hour": int(settings.get("reminder_afternoon_hour", "15")),
+        "evening_hour": int(settings.get("reminder_evening_hour", "20")),
+        "skip_weekends": settings.get("reminder_skip_weekends", "false") == "true",
+        "reminders_enabled": settings.get("reminders_enabled", "true") == "true",
+    }
+
+
+@app.put("/api/settings")
+def update_settings(updates: SettingsUpdate):
+    with get_db() as db:
+        mapping = {
+            "reminder_timezone": updates.reminder_timezone,
+            "reminder_morning_hour": str(updates.reminder_morning_hour) if updates.reminder_morning_hour is not None else None,
+            "reminder_afternoon_hour": str(updates.reminder_afternoon_hour) if updates.reminder_afternoon_hour is not None else None,
+            "reminder_evening_hour": str(updates.reminder_evening_hour) if updates.reminder_evening_hour is not None else None,
+            "reminder_skip_weekends": str(updates.reminder_skip_weekends).lower() if updates.reminder_skip_weekends is not None else None,
+            "reminders_enabled": str(updates.reminders_enabled).lower() if updates.reminders_enabled is not None else None,
+        }
+        for k, v in mapping.items():
+            if v is not None:
+                db.execute(
+                    "INSERT OR REPLACE INTO settings (key, value) VALUES (?, ?)",
+                    (k, v)
+                )
+        db.commit()
+    return get_settings()
+
+
 # ─── Reminder endpoints ─────────────────────────────────────────────────────
 @app.get("/api/reminders/pending")
 def reminders_pending():
-    """
-    Returns team members who need a nudge today.
-    
-    For each member, checks:
-    - not_committed: has not locked in their list for today
-    - incomplete: committed but has unfinished tasks
-    
-    External services (cron jobs, bots) can poll this endpoint
-    and send notifications accordingly.
-    """
     today_str = date.today().isoformat()
     with get_db() as db:
         members = db.execute("SELECT slug, name FROM team ORDER BY created_at").fetchall()
@@ -300,8 +354,7 @@ def reminders_pending():
             
             if not row:
                 pending.append({
-                    "slug": slug,
-                    "name": m["name"],
+                    "slug": slug, "name": m["name"],
                     "reason": "not_committed",
                     "message": f"{m['name']} hasn't committed their list for today.",
                 })
@@ -310,8 +363,7 @@ def reminders_pending():
             day_data = json.loads(row["data"])
             if not day_data.get("locked"):
                 pending.append({
-                    "slug": slug,
-                    "name": m["name"],
+                    "slug": slug, "name": m["name"],
                     "reason": "not_committed",
                     "message": f"{m['name']} hasn't committed their list for today.",
                 })
@@ -320,18 +372,20 @@ def reminders_pending():
             items = day_data.get("items", [])
             total = len([i for i in items if i.get("text")])
             done = len([i for i in items if i.get("text") and i.get("done")])
+            
             if total > 0 and done < total:
                 pending.append({
-                    "slug": slug,
-                    "name": m["name"],
+                    "slug": slug, "name": m["name"],
                     "reason": "incomplete",
-                    "done": done,
-                    "total": total,
+                    "done": done, "total": total,
                     "message": f"{m['name']} has {done}/{total} tasks done.",
-                    "remaining": [
-                        i.get("text") for i in items
-                        if i.get("text") and not i.get("done")
-                    ],
+                    "remaining": [i.get("text") for i in items if i.get("text") and not i.get("done")],
+                })
+            elif total > 0 and done == total and not day_data.get("reflection"):
+                pending.append({
+                    "slug": slug, "name": m["name"],
+                    "reason": "no_reflection",
+                    "message": f"{m['name']} finished all tasks but hasn't reflected.",
                 })
         
         return {
@@ -342,102 +396,243 @@ def reminders_pending():
 
 
 @app.post("/api/reminders/send")
-def send_reminders():
-    """
-    Check who's behind and send push notifications to their devices.
-    Called by external cron or manually.
-    """
+def send_reminders_endpoint():
+    """Manual trigger for sending reminders."""
+    return _send_push_reminders()
+
+
+# ─── Push sending logic ─────────────────────────────────────────────────────
+def _send_push_for_member(slug, payload_dict, db):
+    """Send push notification to all subscriptions for a member. Returns sent count."""
     from pywebpush import webpush, WebPushException
     
+    subs = db.execute(
+        "SELECT id, subscription FROM push_subscriptions WHERE slug = ?",
+        (slug,)
+    ).fetchall()
+    
+    if not subs:
+        return 0
+    
+    payload = json.dumps(payload_dict)
+    sent = 0
+    stale = []
+    
+    for sub_row in subs:
+        sub_data = json.loads(sub_row["subscription"])
+        try:
+            webpush(
+                subscription_info=sub_data,
+                data=payload,
+                vapid_private_key=vapid_private_key,
+                vapid_claims={"sub": VAPID_CLAIMS_EMAIL},
+            )
+            sent += 1
+        except WebPushException as e:
+            if "410" in str(e) or "404" in str(e):
+                stale.append(sub_row["id"])
+            else:
+                print(f"Push error for {slug}: {e}")
+        except Exception as e:
+            print(f"Push error for {slug}: {e}")
+    
+    for sid in stale:
+        db.execute("DELETE FROM push_subscriptions WHERE id = ?", (sid,))
+    if stale:
+        db.commit()
+    
+    return sent
+
+
+def _send_push_reminders(checkpoint=None):
+    """Check conditions and send appropriate push notifications."""
     today_str = date.today().isoformat()
-    pending_data = reminders_pending()
-    
-    if pending_data["all_clear"]:
-        return {"sent": 0, "message": "All clear — everyone is on track!"}
-    
     sent_count = 0
-    errors = []
     
     with get_db() as db:
-        for member in pending_data["pending"]:
-            slug = member["slug"]
+        members = db.execute("SELECT slug, name FROM team ORDER BY created_at").fetchall()
+        
+        for m in members:
+            slug = m["slug"]
+            name = m["name"]
             
-            # Get push subscriptions for this member
-            subs = db.execute(
-                "SELECT id, subscription FROM push_subscriptions WHERE slug = ?",
-                (slug,)
-            ).fetchall()
+            # Check what state this member is in
+            row = db.execute(
+                "SELECT data FROM days WHERE slug = ? AND date = ?",
+                (slug, today_str)
+            ).fetchone()
             
-            if not subs:
-                continue
+            day_data = json.loads(row["data"]) if row else None
+            committed = day_data.get("locked", False) if day_data else False
+            items = day_data.get("items", []) if day_data else []
+            total = len([i for i in items if i.get("text")])
+            done = len([i for i in items if i.get("text") and i.get("done")])
+            has_reflection = bool(day_data.get("reflection")) if day_data else False
             
-            # Build notification payload
-            if member["reason"] == "not_committed":
-                payload = json.dumps({
+            # Determine which checkpoint applies
+            if checkpoint == "morning" and not committed:
+                tag = "morning"
+                payload = {
                     "title": "📋 Commit your six",
-                    "body": "You haven't locked in your tasks for today. What's most important?",
+                    "body": "What matters most today? Write your six tasks and lock them in.",
                     "url": f"/list/{slug}",
-                    "tag": f"ten31-tasks-{today_str}",
-                })
-            else:
-                remaining = member.get("remaining", [])
-                done = member.get("done", 0)
-                total = member.get("total", 0)
-                top_remaining = remaining[0] if remaining else "your tasks"
-                payload = json.dumps({
+                    "tag": f"ten31-{today_str}-morning",
+                }
+            elif checkpoint == "afternoon" and committed and total > 0 and done < total:
+                remaining = [i.get("text") for i in items if i.get("text") and not i.get("done")]
+                top = remaining[0] if remaining else "your tasks"
+                payload = {
                     "title": f"⏳ {done}/{total} done — keep going",
-                    "body": f"Next up: {top_remaining}",
+                    "body": f"Next up: {top}",
                     "url": f"/list/{slug}",
-                    "tag": f"ten31-tasks-{today_str}",
-                })
+                    "tag": f"ten31-{today_str}-afternoon",
+                }
+                tag = "afternoon"
+            elif checkpoint == "evening" and committed and total > 0 and done == total and not has_reflection:
+                payload = {
+                    "title": "📝 Reflect on your day",
+                    "body": "All tasks done — how'd today go? Write a quick reflection.",
+                    "url": f"/list/{slug}",
+                    "tag": f"ten31-{today_str}-evening",
+                }
+                tag = "evening"
+            elif checkpoint is None:
+                # Manual send — pick the most relevant
+                if not committed:
+                    payload = {
+                        "title": "📋 Commit your six",
+                        "body": "What matters most today?",
+                        "url": f"/list/{slug}",
+                        "tag": f"ten31-{today_str}",
+                    }
+                    tag = "manual"
+                elif total > 0 and done < total:
+                    remaining = [i.get("text") for i in items if i.get("text") and not i.get("done")]
+                    top = remaining[0] if remaining else "your tasks"
+                    payload = {
+                        "title": f"⏳ {done}/{total} done",
+                        "body": f"Next up: {top}",
+                        "url": f"/list/{slug}",
+                        "tag": f"ten31-{today_str}",
+                    }
+                    tag = "manual"
+                else:
+                    continue  # Nothing to nudge
+            else:
+                continue  # Condition not met for this checkpoint
             
-            stale_sub_ids = []
-            for sub_row in subs:
-                sub_data = json.loads(sub_row["subscription"])
-                try:
-                    webpush(
-                        subscription_info=sub_data,
-                        data=payload,
-                        vapid_private_key=vapid_private_key,
-                        vapid_claims={"sub": VAPID_CLAIMS_EMAIL},
+            # Check if already sent this checkpoint today
+            if checkpoint:
+                already = db.execute(
+                    "SELECT 1 FROM reminder_log WHERE slug = ? AND date = ? AND checkpoint = ?",
+                    (slug, today_str, tag)
+                ).fetchone()
+                if already:
+                    continue
+            
+            # Send it
+            count = _send_push_for_member(slug, payload, db)
+            if count > 0:
+                sent_count += count
+                if checkpoint:
+                    db.execute(
+                        "INSERT OR IGNORE INTO reminder_log (slug, date, checkpoint) VALUES (?, ?, ?)",
+                        (slug, today_str, tag)
                     )
-                    sent_count += 1
-                except WebPushException as e:
-                    if "410" in str(e) or "404" in str(e):
-                        # Subscription expired or invalid — clean up
-                        stale_sub_ids.append(sub_row["id"])
-                    else:
-                        errors.append(f"{slug}: {str(e)[:100]}")
-                except Exception as e:
-                    errors.append(f"{slug}: {str(e)[:100]}")
-            
-            # Remove stale subscriptions
-            for sid in stale_sub_ids:
-                db.execute("DELETE FROM push_subscriptions WHERE id = ?", (sid,))
-            if stale_sub_ids:
-                db.commit()
+                    db.commit()
     
-    result = {
-        "sent": sent_count,
-        "pending_members": len(pending_data["pending"]),
-    }
-    if errors:
-        result["errors"] = errors
+    return {"sent": sent_count, "checkpoint": checkpoint or "manual"}
+
+
+# ─── Built-in Reminder Scheduler ────────────────────────────────────────────
+def start_reminder_scheduler():
+    """Background thread that checks every 5 minutes if a reminder window has been crossed."""
     
-    return result
+    def scheduler_loop():
+        print("Reminder scheduler started")
+        last_checks = {}  # {checkpoint: last_date_checked}
+        
+        while True:
+            try:
+                time.sleep(300)  # Check every 5 minutes
+                
+                # Load settings
+                settings = get_settings()
+                if not settings.get("reminders_enabled"):
+                    continue
+                
+                tz_name = settings.get("timezone", "America/Chicago")
+                
+                # Get current time in configured timezone
+                try:
+                    import zoneinfo
+                    tz = zoneinfo.ZoneInfo(tz_name)
+                except Exception:
+                    # Fallback: try UTC offset for common US timezones
+                    tz_offsets = {
+                        "America/Chicago": -6, "America/New_York": -5,
+                        "America/Denver": -7, "America/Los_Angeles": -8,
+                        "US/Central": -6, "US/Eastern": -5,
+                        "US/Mountain": -7, "US/Pacific": -8,
+                    }
+                    offset_hours = tz_offsets.get(tz_name, -6)
+                    now_utc = datetime.utcnow()
+                    now_local = now_utc + timedelta(hours=offset_hours)
+                    tz = None
+                
+                if tz:
+                    now_local = datetime.now(tz)
+                
+                current_hour = now_local.hour
+                current_day = now_local.strftime("%A")
+                today_str = now_local.strftime("%Y-%m-%d")
+                
+                # Skip weekends if configured
+                if settings.get("skip_weekends") and current_day in ("Saturday", "Sunday"):
+                    continue
+                
+                # Check each checkpoint
+                checkpoints = [
+                    ("morning", settings.get("morning_hour", 9)),
+                    ("afternoon", settings.get("afternoon_hour", 15)),
+                    ("evening", settings.get("evening_hour", 20)),
+                ]
+                
+                for cp_name, cp_hour in checkpoints:
+                    check_key = f"{cp_name}:{today_str}"
+                    
+                    # Fire if we're in the right hour and haven't checked this window today
+                    if current_hour == cp_hour and last_checks.get(check_key) != True:
+                        last_checks[check_key] = True
+                        try:
+                            result = _send_push_reminders(checkpoint=cp_name)
+                            if result["sent"] > 0:
+                                print(f"Reminder [{cp_name}]: sent {result['sent']} notifications")
+                        except Exception as e:
+                            print(f"Reminder [{cp_name}] error: {e}")
+                
+                # Clean old keys (keep only today)
+                stale_keys = [k for k in last_checks if not k.endswith(today_str)]
+                for k in stale_keys:
+                    del last_checks[k]
+                    
+            except Exception as e:
+                print(f"Scheduler error: {e}")
+                traceback.print_exc()
+    
+    t = threading.Thread(target=scheduler_loop, daemon=True)
+    t.start()
 
 
 # ─── Bulk endpoint for team board ────────────────────────────────────────────
 @app.get("/api/team/today")
 def team_today():
-    """Return today's data + recent stats for all team members."""
     today_str = date.today().isoformat()
     with get_db() as db:
         members = db.execute("SELECT slug, name FROM team ORDER BY created_at").fetchall()
         result = []
         for m in members:
             slug = m["slug"]
-            # Get all days for streak + 7d calc
             rows = db.execute(
                 "SELECT date, data FROM days WHERE slug = ? ORDER BY date DESC LIMIT 30",
                 (slug,)
