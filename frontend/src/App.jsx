@@ -914,7 +914,7 @@ export default function App() {
                 setView("day");
               }} />
             )}
-            <TeamManage team={team} />
+
           </>
         )}
 
