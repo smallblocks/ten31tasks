@@ -439,33 +439,22 @@ function TeamBoard({ teamData, onSelectMember }) {
 }
 
 // ─── Team Management ────────────────────────────────────────────────────────
-function TeamManage({ team, onAdd, onRemove }) {
-  const [newName, setNewName] = useState("");
-  const handleAdd = () => {
-    const name = newName.trim();
-    if (!name) return;
-    const slug = name.toLowerCase().replace(/[^a-z0-9]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
-    if (!slug || team.find(m => m.slug === slug)) return;
-    onAdd({ name, slug });
-    setNewName("");
-  };
+function TeamManage({ team }) {
+  if (team.length === 0) {
+    return (
+      <div style={{ marginTop: 20, padding: "20px 0", borderTop: `1px solid ${BORDER}`, textAlign: "center" }}>
+        <p style={{ fontFamily: MONO, fontSize: 12, color: TEXT_DIM }}>No team members yet. Add members via StartOS Actions.</p>
+      </div>
+    );
+  }
   return (
     <div style={{ marginTop: 20, padding: "20px 0", borderTop: `1px solid ${BORDER}` }}>
-      <label style={{ fontFamily: MONO, fontSize: 11, color: TEXT_DIM, letterSpacing: "0.04em", display: "block", marginBottom: 12 }}>MANAGE TEAM</label>
-      <div style={{ display: "flex", gap: 8, marginBottom: 16 }}>
-        <input value={newName} onChange={e => setNewName(e.target.value)} onKeyDown={e => { if (e.key === "Enter") handleAdd(); }}
-          placeholder="Add team member…"
-          style={{ flex: 1, background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 6, color: WHITE, fontFamily: SANS, fontSize: 14, padding: "8px 12px", outline: "none" }} />
-        <button onClick={handleAdd} style={{ background: GOLD, border: "none", color: BG, fontFamily: MONO, fontSize: 11, fontWeight: 600, padding: "8px 16px", borderRadius: 6, cursor: "pointer" }}>Add</button>
-      </div>
+      <label style={{ fontFamily: MONO, fontSize: 11, color: TEXT_DIM, letterSpacing: "0.04em", display: "block", marginBottom: 12 }}>TEAM MEMBERS</label>
       <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
         {team.map(m => (
-          <div key={m.slug} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "8px 12px", background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 6 }}>
-            <div>
-              <span style={{ fontFamily: SANS, fontSize: 14, color: WHITE }}>{m.name}</span>
-              <span style={{ fontFamily: MONO, fontSize: 11, color: TEXT_DIM, marginLeft: 10 }}>/list/{m.slug}</span>
-            </div>
-            <button onClick={() => onRemove(m.slug)} style={{ background: "transparent", border: "none", color: TEXT_DIM, cursor: "pointer", padding: 4, display: "flex" }}><XIcon /></button>
+          <div key={m.slug} style={{ display: "flex", alignItems: "center", padding: "8px 12px", background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 6 }}>
+            <span style={{ fontFamily: SANS, fontSize: 14, color: WHITE }}>{m.name}</span>
+            <span style={{ fontFamily: MONO, fontSize: 11, color: TEXT_DIM, marginLeft: 10 }}>/list/{m.slug}</span>
           </div>
         ))}
       </div>
@@ -641,23 +630,7 @@ export default function App() {
     setUserDays(days);
   };
 
-  const addMember = async (member) => {
-    try {
-      await api("/team", { method: "POST", body: JSON.stringify(member) });
-      const t = await api("/team");
-      setTeam(t);
-      await refreshTeam();
-    } catch (e) { console.error(e); }
-  };
-  const removeMember = async (slug) => {
-    try {
-      await api(`/team/${slug}`, { method: "DELETE" });
-      const t = await api("/team");
-      setTeam(t);
-      await refreshTeam();
-      if (viewingMember === slug) setViewingMember(null);
-    } catch (e) { console.error(e); }
-  };
+
 
   const calcStreak = (days) => {
     let streak = 0, d = today();
@@ -930,7 +903,7 @@ export default function App() {
                 setView("day");
               }} />
             )}
-            <TeamManage team={team} onAdd={addMember} onRemove={removeMember} />
+            <TeamManage team={team} />
           </>
         )}
 
