@@ -895,11 +895,22 @@ export default function App() {
           <>
             {teamData.length > 0 && (
               <TeamBoard teamData={teamData} onSelectMember={async (slug) => {
-                setViewingMember(slug);
-                setSelectedDate(today());
-                if (slug !== currentUser) {
+                if (!currentUser) {
+                  // First tap identifies you — sets you as this user
+                  setCurrentUser(slug);
+                  setViewingMember(null);
+                  window.history.pushState(null, "", `/list/${slug}`);
+                  const days = await api(`/days/${slug}`);
+                  setUserDays(days);
+                } else if (slug !== currentUser) {
+                  // Viewing someone else's tasks (read-only)
+                  setViewingMember(slug);
                   try { const d = await api(`/days/${slug}`); setViewingDays(d); } catch { setViewingDays({}); }
+                } else {
+                  // Tapped yourself — go to your own editable view
+                  setViewingMember(null);
                 }
+                setSelectedDate(today());
                 setView("day");
               }} />
             )}
