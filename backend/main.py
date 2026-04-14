@@ -30,6 +30,10 @@ vapid_public_key = None
 def init_vapid():
     """Generate VAPID keys on first run, load from disk thereafter."""
     global vapid_private_key, vapid_public_key
+    import base64
+    from cryptography.hazmat.primitives.asymmetric import ec
+    from cryptography.hazmat.primitives import serialization
+    
     priv_path = Path(VAPID_KEY_PATH) / "private_key.pem"
     pub_path = Path(VAPID_KEY_PATH) / "public_key.txt"
     
@@ -39,24 +43,23 @@ def init_vapid():
         print(f"VAPID keys loaded from {VAPID_KEY_PATH}")
         return
     
-    # Generate new keys
-    from py_vapid import Vapid
-    v = Vapid()
-    v.generate_keys()
+    # Generate new ECDSA P-256 keys using cryptography directly
+    private_key = ec.generate_private_key(ec.SECP256R1())
     
     Path(VAPID_KEY_PATH).mkdir(parents=True, exist_ok=True)
     
     # Save private key PEM
-    priv_pem = v.private_pem()
-    if isinstance(priv_pem, bytes):
-        priv_pem = priv_pem.decode('utf-8')
+    priv_pem = private_key.private_bytes(
+        encoding=serialization.Encoding.PEM,
+        format=serialization.PrivateFormat.PKCS8,
+        encryption_algorithm=serialization.NoEncryption(),
+    ).decode('utf-8')
     priv_path.write_text(priv_pem)
     
-    # Save public key as base64url (applicationServerKey for the browser)
-    import base64
-    raw = v.public_key.public_bytes(
-        encoding=__import__('cryptography').hazmat.primitives.serialization.Encoding.X962,
-        format=__import__('cryptography').hazmat.primitives.serialization.PublicFormat.UncompressedPoint,
+    # Save public key as base64url uncompressed point (applicationServerKey)
+    raw = private_key.public_key().public_bytes(
+        encoding=serialization.Encoding.X962,
+        format=serialization.PublicFormat.UncompressedPoint,
     )
     pub_b64 = base64.urlsafe_b64encode(raw).decode('utf-8').rstrip('=')
     pub_path.write_text(pub_b64)
