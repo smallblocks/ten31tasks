@@ -194,38 +194,22 @@ function Homepage({ team, onSelectMember, onGoTeam, themeMode, toggleTheme }) {
           {themeMode === 'dark' ? <SunIcon /> : <MoonIcon />}
         </button>
         <h1 style={{ fontFamily: SERIF, fontSize: 36, fontWeight: 700, color: WHITE, margin: 0, letterSpacing: "0.06em" }}>TEN31 TASKS</h1>
-        <p style={{ fontFamily: MONO, fontSize: 11, color: GOLD, letterSpacing: "0.08em", marginTop: 8 }}>SIX THINGS. IN ORDER. STARTING WITH THE FIRST.</p>
+        <p style={{ fontFamily: MONO, fontSize: 11, color: GOLD, letterSpacing: "0.08em", marginTop: 8 }}>Create. Prioritize. Accomplish.</p>
       </header>
 
-      {/* Get Started — team selection at top */}
+      {/* Get Started */}
       <section style={{ marginBottom: 40, textAlign: "center" }}>
-        {team.length > 0 ? (
-          <>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 10, justifyContent: "center", marginBottom: 20 }}>
-              {team.map(m => (
-                <button key={m.slug} onClick={() => onSelectMember(m.slug)}
-                  style={{
-                    background: GOLD_DIM, border: `1px solid ${GOLD}33`, borderRadius: 8, color: WHITE,
-                    fontFamily: SANS, fontSize: 15, fontWeight: 500, padding: "12px 24px", cursor: "pointer",
-                    transition: "all 0.15s ease",
-                  }}
-                  onMouseEnter={e => { e.target.style.borderColor = GOLD; e.target.style.background = `${GOLD}22`; }}
-                  onMouseLeave={e => { e.target.style.borderColor = `${GOLD}33`; e.target.style.background = GOLD_DIM; }}>
-                  {m.name}
-                </button>
-              ))}
-            </div>
-            <button onClick={onGoTeam}
-              style={{ background: "transparent", border: `1px solid ${BORDER}`, borderRadius: 6, color: TEXT_DIM, fontFamily: MONO, fontSize: 11, padding: "8px 20px", cursor: "pointer", letterSpacing: "0.04em" }}>
-              View Team Board →
-            </button>
-          </>
-        ) : (
-          <button onClick={onGoTeam}
-            style={{ background: GOLD, border: "none", borderRadius: 8, color: BG, fontFamily: MONO, fontSize: 13, fontWeight: 600, padding: "12px 28px", cursor: "pointer", letterSpacing: "0.04em" }}>
-            Add Team Members →
-          </button>
-        )}
+        <button onClick={onGoTeam}
+          style={{
+            background: team.length > 0 ? "transparent" : GOLD,
+            border: team.length > 0 ? `1px solid ${BORDER}` : "none",
+            borderRadius: 6,
+            color: team.length > 0 ? TEXT_DIM : BG,
+            fontFamily: MONO, fontSize: 12, fontWeight: 600,
+            padding: "10px 24px", cursor: "pointer", letterSpacing: "0.04em",
+          }}>
+          {team.length > 0 ? "View Team Board →" : "Add Team Members →"}
+        </button>
       </section>
 
       {/* How It Works */}
@@ -233,19 +217,13 @@ function Homepage({ team, onSelectMember, onGoTeam, themeMode, toggleTheme }) {
         <h2 style={{ fontFamily: SERIF, fontSize: 22, color: WHITE, marginBottom: 16, borderBottom: `1px solid ${BORDER}`, paddingBottom: 12 }}>How It Works</h2>
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           {[
-            { num: "1", title: "Each evening, write your six tasks", desc: "Rank them — #1 is the most important thing. Not the most urgent. The most important." },
-            { num: "2", title: "Commit your list", desc: "Lock it in. This is your commitment to yourself and your team. No rearranging tomorrow." },
-            { num: "3", title: "Work top-down", desc: "Start with #1. Do not touch #2 until #1 is done. The order is the strategy." },
-            { num: "4", title: "Check off as you go", desc: "Mark tasks complete throughout the day. Your team sees your progress in real time." },
-            { num: "5", title: "Reflect at end of day", desc: "What got done? What didn't? Why? A few honest sentences compounds into self-awareness." },
-            { num: "6", title: "Carry forward what's unfinished", desc: "Unfinished tasks roll to tomorrow. If something keeps rolling, ask whether it actually matters." },
+            { num: "1", desc: "At night, write the six tasks you want to accomplish tomorrow. #1 is the highest use of your time. Not the most urgent. The most important." },
+            { num: "2", desc: "Lock in tomorrow's tasks. Write a reflection on the day." },
+            { num: "3", desc: "Begin the day with #1. Check off what you have accomplished." },
           ].map((step) => (
             <div key={step.num} style={{ display: "flex", gap: 16, padding: "14px 16px", background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 8 }}>
               <span style={{ fontFamily: SERIF, fontSize: 24, fontWeight: 700, color: GOLD, width: 28, flexShrink: 0, textAlign: "center" }}>{step.num}</span>
-              <div>
-                <div style={{ fontFamily: SANS, fontSize: 15, fontWeight: 600, color: WHITE, marginBottom: 4 }}>{step.title}</div>
-                <div style={{ fontFamily: SANS, fontSize: 14, color: TEXT, lineHeight: 1.6 }}>{step.desc}</div>
-              </div>
+              <div style={{ fontFamily: SANS, fontSize: 15, color: TEXT, lineHeight: 1.7 }}>{step.desc}</div>
             </div>
           ))}
         </div>
@@ -727,7 +705,7 @@ export default function App() {
               style={{ fontFamily: SERIF, fontSize: 26, fontWeight: 700, color: WHITE, margin: 0, letterSpacing: "0.06em", cursor: "pointer" }}>
               TEN31 TASKS
             </h1>
-            <span style={{ fontFamily: MONO, fontSize: 10, color: TEXT_DIM, letterSpacing: "0.04em" }}>Six things. In order. Starting with the first.</span>
+            <span style={{ fontFamily: MONO, fontSize: 10, color: TEXT_DIM, letterSpacing: "0.04em" }}>Create. Prioritize. Accomplish.</span>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <SyncIcon syncing={syncing} />
