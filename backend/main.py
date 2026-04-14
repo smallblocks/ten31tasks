@@ -395,6 +395,91 @@ def reminders_pending():
         }
 
 
+# ─── Reflections endpoint ────────────────────────────────────────────────────
+@app.get("/api/reflections/{slug}")
+def get_reflections(slug: str, period: Optional[str] = None, start: Optional[str] = None, end: Optional[str] = None):
+    """
+    Return reflections for a team member.
+    
+    Query params:
+      period: week | month | quarter | year (relative to today)
+      start/end: YYYY-MM-DD custom date range
+    
+    Returns dated reflections with task context (what was planned, what got done).
+    Designed for weekly/monthly/yearly review synthesis.
+    """
+    today_str = date.today().isoformat()
+    
+    # Determine date range
+    if start and end:
+        date_from = start
+        date_to = end
+    elif period == "week":
+        date_from = shiftDate(today_str, -7)
+        date_to = today_str
+    elif period == "month":
+        date_from = shiftDate(today_str, -30)
+        date_to = today_str
+    elif period == "quarter":
+        date_from = shiftDate(today_str, -90)
+        date_to = today_str
+    elif period == "year":
+        date_from = shiftDate(today_str, -365)
+        date_to = today_str
+    else:
+        # Default: last 30 days
+        date_from = shiftDate(today_str, -30)
+        date_to = today_str
+    
+    with get_db() as db:
+        # Verify member exists
+        member = db.execute("SELECT name FROM team WHERE slug = ?", (slug,)).fetchone()
+        if not member:
+            raise HTTPException(404, f"Member '{slug}' not found")
+        
+        rows = db.execute(
+            "SELECT date, data FROM days WHERE slug = ? AND date >= ? AND date <= ? ORDER BY date DESC",
+            (slug, date_from, date_to)
+        ).fetchall()
+        
+        reflections = []
+        for r in rows:
+            day_data = json.loads(r["data"])
+            reflection_text = day_data.get("reflection", "").strip()
+            if not reflection_text:
+                continue
+            
+            items = day_data.get("items", [])
+            total = len([i for i in items if i.get("text")])
+            done = len([i for i in items if i.get("text") and i.get("done")])
+            
+            reflections.append({
+                "date": r["date"],
+                "reflection": reflection_text,
+                "tasks_planned": [i.get("text") for i in items if i.get("text")],
+                "tasks_completed": [i.get("text") for i in items if i.get("text") and i.get("done")],
+                "tasks_incomplete": [i.get("text") for i in items if i.get("text") and not i.get("done")],
+                "completion": f"{done}/{total}" if total > 0 else "0/0",
+                "completion_pct": round((done / total) * 100) if total > 0 else 0,
+            })
+        
+        return {
+            "slug": slug,
+            "name": member["name"],
+            "period": period or "custom",
+            "from": date_from,
+            "to": date_to,
+            "count": len(reflections),
+            "reflections": reflections,
+        }
+
+
+def shiftDate(iso: str, days: int) -> str:
+    """Shift an ISO date string by N days."""
+    d = date.fromisoformat(iso) + timedelta(days=days)
+    return d.isoformat()
+
+
 @app.post("/api/reminders/send")
 def send_reminders_endpoint():
     """Manual trigger for sending reminders."""
