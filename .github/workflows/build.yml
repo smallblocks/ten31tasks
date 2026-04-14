@@ -16,7 +16,8 @@ jobs:
 
       - name: Download start-cli
         run: |
-          curl -L -o start-cli "https://github.com/smallblocks/staticrypt-startos/releases/download/tools-v1/start-cli"
+          curl -L -o start-cli.tar.gz "https://github.com/smallblocks/staticrypt-startos/releases/download/tools-v1/start-cli-linux-x86_64.tar.gz"
+          tar xzf start-cli.tar.gz
           chmod +x start-cli
           sudo mv start-cli /usr/local/bin/
 
