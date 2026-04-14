@@ -58,6 +58,121 @@ const TeamIcon = () => <svg width="16" height="16" viewBox="0 0 16 16" fill="non
 const XIcon = () => <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><line x1="3" y1="3" x2="11" y2="11"/><line x1="11" y1="3" x2="3" y2="11"/></svg>;
 const SyncIcon = ({ syncing }) => <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke={syncing ? GOLD : TEXT_DIM} strokeWidth="1.2" strokeLinecap="round" style={syncing ? { animation: "spin 1s linear infinite" } : {}}><path d="M1 6a5 5 0 019-2"/><path d="M11 6a5 5 0 01-9 2"/><polyline points="1 2 1 6 5 6" style={{ fill: "none" }}/><polyline points="11 10 11 6 7 6" style={{ fill: "none" }}/></svg>;
 
+// ─── Homepage ───────────────────────────────────────────────────────────────
+function Homepage({ team, onSelectMember, onGoTeam }) {
+  return (
+    <div style={{ maxWidth: 640, margin: "0 auto", padding: "0 20px 80px" }}>
+      <header style={{ paddingTop: 48, paddingBottom: 32, textAlign: "center" }}>
+        <h1 style={{ fontFamily: SERIF, fontSize: 36, fontWeight: 700, color: WHITE, margin: 0, letterSpacing: "0.06em" }}>TEN31 TASKS</h1>
+        <p style={{ fontFamily: MONO, fontSize: 11, color: GOLD, letterSpacing: "0.08em", marginTop: 8 }}>SIX THINGS. IN ORDER. STARTING WITH THE FIRST.</p>
+      </header>
+
+      {/* The Method */}
+      <section style={{ marginBottom: 40 }}>
+        <h2 style={{ fontFamily: SERIF, fontSize: 22, color: WHITE, marginBottom: 16, borderBottom: `1px solid ${BORDER}`, paddingBottom: 12 }}>The Method</h2>
+        <p style={{ fontFamily: SANS, fontSize: 15, color: TEXT, lineHeight: 1.7, marginBottom: 16 }}>
+          In 1918, productivity consultant Ivy Lee gave Charles Schwab — president of Bethlehem Steel, then the largest shipbuilder and second-largest steel producer in America — the simplest management advice ever sold:
+        </p>
+        <div style={{ background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 8, padding: "20px 24px", marginBottom: 16, borderLeft: `3px solid ${GOLD}` }}>
+          <p style={{ fontFamily: SANS, fontSize: 15, color: WHITE, lineHeight: 1.7, fontStyle: "italic", margin: 0 }}>
+            "At the end of each workday, write down the six most important things you need to accomplish tomorrow. Do not write more than six. Prioritize them in order of importance. When you arrive tomorrow, work on the first task until it is finished before moving on to the second. Continue down the list. At the end of the day, move any unfinished items to a new list for the next day. Repeat every working day."
+          </p>
+        </div>
+        <p style={{ fontFamily: SANS, fontSize: 15, color: TEXT, lineHeight: 1.7, marginBottom: 12 }}>
+          Schwab tried it for three months. Then he sent Lee a check for $25,000 — about $590,000 in today's dollars — calling it the most profitable lesson he'd ever learned.
+        </p>
+        <p style={{ fontFamily: SANS, fontSize: 15, color: TEXT, lineHeight: 1.7 }}>
+          It works because it forces clarity. Six is a constraint — you can't list everything, so you must decide what actually matters. The ordering removes the decision fatigue of "what should I do next?" And the commitment — writing it down the night before — means you start each day with intent, not inbox-driven reaction.
+        </p>
+      </section>
+
+      {/* How It Works */}
+      <section style={{ marginBottom: 40 }}>
+        <h2 style={{ fontFamily: SERIF, fontSize: 22, color: WHITE, marginBottom: 16, borderBottom: `1px solid ${BORDER}`, paddingBottom: 12 }}>How It Works</h2>
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          {[
+            { num: "1", title: "Each evening, write your six tasks", desc: "Rank them — #1 is the most important thing. Not the most urgent. The most important." },
+            { num: "2", title: "Commit your list", desc: "Lock it in. This is your commitment to yourself and your team. No rearranging tomorrow." },
+            { num: "3", title: "Work top-down", desc: "Start with #1. Do not touch #2 until #1 is done. The order is the strategy." },
+            { num: "4", title: "Check off as you go", desc: "Mark tasks complete throughout the day. Your team sees your progress in real time." },
+            { num: "5", title: "Reflect at end of day", desc: "What got done? What didn't? Why? A few honest sentences compounds into self-awareness." },
+            { num: "6", title: "Carry forward what's unfinished", desc: "Unfinished tasks roll to tomorrow. If something keeps rolling, ask whether it actually matters." },
+          ].map((step) => (
+            <div key={step.num} style={{ display: "flex", gap: 16, padding: "14px 16px", background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 8 }}>
+              <span style={{ fontFamily: SERIF, fontSize: 24, fontWeight: 700, color: GOLD, width: 28, flexShrink: 0, textAlign: "center" }}>{step.num}</span>
+              <div>
+                <div style={{ fontFamily: SANS, fontSize: 15, fontWeight: 600, color: WHITE, marginBottom: 4 }}>{step.title}</div>
+                <div style={{ fontFamily: SANS, fontSize: 14, color: TEXT, lineHeight: 1.6 }}>{step.desc}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* Team Accountability */}
+      <section style={{ marginBottom: 40 }}>
+        <h2 style={{ fontFamily: SERIF, fontSize: 22, color: WHITE, marginBottom: 16, borderBottom: `1px solid ${BORDER}`, paddingBottom: 12 }}>Team Accountability</h2>
+        <p style={{ fontFamily: SANS, fontSize: 15, color: TEXT, lineHeight: 1.7, marginBottom: 12 }}>
+          The team board shows everyone's daily commitment, progress, streaks, and completion rates. No managers hovering — just natural transparency. When you can see that your teammates committed their six and are grinding through them, you don't want to be the one who didn't show up.
+        </p>
+        <p style={{ fontFamily: SANS, fontSize: 15, color: TEXT, lineHeight: 1.7 }}>
+          It's a calendar heatmap of proof-of-work. Green days are days you showed up and delivered. Red days are days you didn't commit. Over time, the pattern speaks louder than any status meeting.
+        </p>
+      </section>
+
+      {/* Reminders */}
+      <section style={{ marginBottom: 48 }}>
+        <h2 style={{ fontFamily: SERIF, fontSize: 22, color: WHITE, marginBottom: 16, borderBottom: `1px solid ${BORDER}`, paddingBottom: 12 }}>Reminders</h2>
+        <p style={{ fontFamily: SANS, fontSize: 15, color: TEXT, lineHeight: 1.7 }}>
+          Ten31 Tasks exposes a reminder API that external services can poll. At a configured time each day, if you haven't committed your list or completed your tasks, a nudge gets sent — gentle accountability that the tool works for you even when you're not looking at it.
+        </p>
+        <div style={{ fontFamily: MONO, fontSize: 12, color: TEXT_DIM, background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 6, padding: "12px 16px", marginTop: 12 }}>
+          GET /api/reminders/pending — returns who needs a nudge
+        </div>
+      </section>
+
+      {/* Get Started */}
+      <section style={{ textAlign: "center", padding: "32px 0", borderTop: `1px solid ${BORDER}` }}>
+        {team.length > 0 ? (
+          <>
+            <p style={{ fontFamily: MONO, fontSize: 12, color: TEXT_DIM, letterSpacing: "0.04em", marginBottom: 20 }}>SELECT YOUR NAME TO BEGIN</p>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 10, justifyContent: "center", marginBottom: 24 }}>
+              {team.map(m => (
+                <button key={m.slug} onClick={() => onSelectMember(m.slug)}
+                  style={{
+                    background: GOLD_DIM, border: `1px solid ${GOLD}33`, borderRadius: 8, color: WHITE,
+                    fontFamily: SANS, fontSize: 15, fontWeight: 500, padding: "12px 24px", cursor: "pointer",
+                    transition: "all 0.15s ease",
+                  }}
+                  onMouseEnter={e => { e.target.style.borderColor = GOLD; e.target.style.background = `${GOLD}22`; }}
+                  onMouseLeave={e => { e.target.style.borderColor = `${GOLD}33`; e.target.style.background = GOLD_DIM; }}>
+                  {m.name}
+                </button>
+              ))}
+            </div>
+            <button onClick={onGoTeam}
+              style={{ background: "transparent", border: `1px solid ${BORDER}`, borderRadius: 6, color: TEXT_DIM, fontFamily: MONO, fontSize: 11, padding: "8px 20px", cursor: "pointer", letterSpacing: "0.04em" }}>
+              View Team Board →
+            </button>
+          </>
+        ) : (
+          <>
+            <p style={{ fontFamily: SANS, fontSize: 16, color: WHITE, marginBottom: 12 }}>Ready to start?</p>
+            <button onClick={onGoTeam}
+              style={{ background: GOLD, border: "none", borderRadius: 8, color: BG, fontFamily: MONO, fontSize: 13, fontWeight: 600, padding: "12px 28px", cursor: "pointer", letterSpacing: "0.04em" }}>
+              Add Team Members →
+            </button>
+          </>
+        )}
+      </section>
+
+      <footer style={{ textAlign: "center", paddingTop: 24 }}>
+        <p style={{ fontFamily: MONO, fontSize: 9, color: "#332e25", letterSpacing: "0.06em" }}>TEN31 TASKS · Investing in Freedom Tech</p>
+      </footer>
+    </div>
+  );
+}
+
 // ─── Calendar Heatmap ───────────────────────────────────────────────────────
 function CalendarHeatmap({ days, selectedDate, onSelect }) {
   const d = new Date(selectedDate + "T12:00:00");
@@ -290,14 +405,15 @@ function TeamManage({ team, onAdd, onRemove }) {
 // ─── Main App ───────────────────────────────────────────────────────────────
 export default function App() {
   const [team, setTeam] = useState([]);
-  const [teamData, setTeamData] = useState([]);  // enriched team with days
-  const [userDays, setUserDays] = useState({});   // active user's full days
+  const [teamData, setTeamData] = useState([]);
+  const [userDays, setUserDays] = useState({});
   const [currentUser, setCurrentUser] = useState(null);
   const [view, setView] = useState("day");
   const [selectedDate, setSelectedDate] = useState(today());
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [viewingMember, setViewingMember] = useState(null);
+  const [showHome, setShowHome] = useState(false);
   const inputRefs = useRef([]);
 
   // ── Parse URL and load initial data ──
@@ -316,9 +432,11 @@ export default function App() {
             const days = await api(`/days/${slug}`);
             setUserDays(days);
           }
+        } else {
+          // Root path — show homepage
+          setShowHome(true);
         }
 
-        // Load team board data
         const td = await api("/team/today");
         setTeamData(td);
       } catch (e) {
@@ -328,7 +446,7 @@ export default function App() {
     })();
   }, []);
 
-  // ── Server-side save (fires on every mutation) ──
+  // ── Server-side save ──
   const saveDay = useCallback(async (slug, dateStr, dayData) => {
     setSyncing(true);
     try {
@@ -347,13 +465,9 @@ export default function App() {
     setSyncing(false);
   }, []);
 
-  // Debounced save for keystrokes (300ms)
   const debouncedSave = useDebounce(saveDay, 300);
-
-  // Immediate save (for locks, checks, carry-forward)
   const immediateSave = saveDay;
 
-  // Refresh team board
   const refreshTeam = useCallback(async () => {
     try {
       const td = await api("/team/today");
@@ -361,11 +475,9 @@ export default function App() {
     } catch (e) { console.error(e); }
   }, []);
 
-  // Active user context
   const activeSlug = viewingMember || currentUser;
   const activeMember = team.find(m => m.slug === activeSlug);
 
-  // When viewing another member, load their days
   const [viewingDays, setViewingDays] = useState({});
   useEffect(() => {
     if (viewingMember && viewingMember !== currentUser) {
@@ -378,7 +490,6 @@ export default function App() {
   const isToday_ = selectedDate === today();
   const canEdit = activeSlug === currentUser && !viewingMember;
 
-  // ── Mutations (update local state + fire save) ──
   const updateDay = (dateStr, newDayData, immediate = false) => {
     const slug = currentUser;
     setUserDays(prev => ({ ...prev, [dateStr]: newDayData }));
@@ -393,7 +504,6 @@ export default function App() {
     if (!canEdit) return;
     const d = structuredClone(activeDays[selectedDate] || blankDay());
     Object.assign(d.items[idx], patch);
-    // Text changes are debounced, done toggles are immediate
     updateDay(selectedDate, d, patch.done !== undefined);
   };
 
@@ -417,7 +527,7 @@ export default function App() {
     if (!canEdit) return;
     const d = structuredClone(activeDays[selectedDate] || blankDay());
     d.reflection = val;
-    updateDay(selectedDate, d, false); // debounced
+    updateDay(selectedDate, d, false);
   };
 
   const carryForward = () => {
@@ -432,7 +542,14 @@ export default function App() {
     setSelectedDate(tomorrow);
   };
 
-  // Team management
+  const selectMemberFromHome = async (slug) => {
+    setCurrentUser(slug);
+    setShowHome(false);
+    window.history.pushState(null, "", `/list/${slug}`);
+    const days = await api(`/days/${slug}`);
+    setUserDays(days);
+  };
+
   const addMember = async (member) => {
     try {
       await api("/team", { method: "POST", body: JSON.stringify(member) });
@@ -465,6 +582,19 @@ export default function App() {
     );
   }
 
+  // ── Homepage (root path, no user selected) ──
+  if (showHome && !currentUser) {
+    return (
+      <div style={{ background: BG, minHeight: "100vh", color: TEXT, fontFamily: SANS, WebkitFontSmoothing: "antialiased" }}>
+        <Homepage
+          team={team}
+          onSelectMember={selectMemberFromHome}
+          onGoTeam={() => { setShowHome(false); setView("team"); }}
+        />
+      </div>
+    );
+  }
+
   const streak = activeSlug ? calcStreak(activeDays) : 0;
   const filledItems = day.items.filter(i => i.text).length;
   const doneItems = day.items.filter(i => i.text && i.done).length;
@@ -477,7 +607,11 @@ export default function App() {
         {/* Header */}
         <header style={{ paddingTop: 36, paddingBottom: 16, borderBottom: `1px solid ${BORDER}`, display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
           <div>
-            <h1 style={{ fontFamily: SERIF, fontSize: 26, fontWeight: 700, color: WHITE, margin: 0, letterSpacing: "0.06em" }}>TEN31 TASKS</h1>
+            <h1
+              onClick={() => { setShowHome(true); setCurrentUser(null); setViewingMember(null); window.history.pushState(null, "", "/"); }}
+              style={{ fontFamily: SERIF, fontSize: 26, fontWeight: 700, color: WHITE, margin: 0, letterSpacing: "0.06em", cursor: "pointer" }}>
+              TEN31 TASKS
+            </h1>
             <span style={{ fontFamily: MONO, fontSize: 10, color: TEXT_DIM, letterSpacing: "0.04em" }}>Six things. In order. Starting with the first.</span>
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>

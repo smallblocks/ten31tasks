@@ -178,6 +178,73 @@ def update_day(slug: str, day_date: str, update: DayUpdate):
         return existing
 
 
+# ─── Reminder endpoints ──────────────────────────────────────────────────────
+@app.get("/api/reminders/pending")
+def reminders_pending():
+    """
+    Returns team members who need a nudge today.
+    
+    For each member, checks:
+    - not_committed: has not locked in their list for today
+    - incomplete: committed but has unfinished tasks
+    
+    External services (cron jobs, bots) can poll this endpoint
+    and send notifications accordingly.
+    """
+    today_str = date.today().isoformat()
+    with get_db() as db:
+        members = db.execute("SELECT slug, name FROM team ORDER BY created_at").fetchall()
+        pending = []
+        for m in members:
+            slug = m["slug"]
+            row = db.execute(
+                "SELECT data FROM days WHERE slug = ? AND date = ?",
+                (slug, today_str)
+            ).fetchone()
+            
+            if not row:
+                pending.append({
+                    "slug": slug,
+                    "name": m["name"],
+                    "reason": "not_committed",
+                    "message": f"{m['name']} hasn't committed their list for today.",
+                })
+                continue
+            
+            day_data = json.loads(row["data"])
+            if not day_data.get("locked"):
+                pending.append({
+                    "slug": slug,
+                    "name": m["name"],
+                    "reason": "not_committed",
+                    "message": f"{m['name']} hasn't committed their list for today.",
+                })
+                continue
+            
+            items = day_data.get("items", [])
+            total = len([i for i in items if i.get("text")])
+            done = len([i for i in items if i.get("text") and i.get("done")])
+            if total > 0 and done < total:
+                pending.append({
+                    "slug": slug,
+                    "name": m["name"],
+                    "reason": "incomplete",
+                    "done": done,
+                    "total": total,
+                    "message": f"{m['name']} has {done}/{total} tasks done.",
+                    "remaining": [
+                        i.get("text") for i in items
+                        if i.get("text") and not i.get("done")
+                    ],
+                })
+        
+        return {
+            "date": today_str,
+            "pending": pending,
+            "all_clear": len(pending) == 0,
+        }
+
+
 # ─── Bulk endpoint for team board ────────────────────────────────────────────
 @app.get("/api/team/today")
 def team_today():
