@@ -5,14 +5,50 @@ const MONO = "'JetBrains Mono','SF Mono','Fira Code',monospace";
 const SERIF = "'Playfair Display','Georgia',serif";
 const SANS = "'DM Sans','Helvetica Neue','Segoe UI',sans-serif";
 const GOLD = "#c8a44e";
-const GOLD_DIM = "rgba(200,164,78,0.15)";
-const BG = "#0c0b09";
-const SURFACE = "#161412";
-const BORDER = "#2a2620";
-const TEXT = "#c9bfad";
-const TEXT_DIM = "#c0b5a3";
-const WHITE = "#f0ebe0";
-const RED_DIM = "#3a1515";
+
+const THEMES = {
+  dark: {
+    GOLD_DIM: "rgba(200,164,78,0.15)",
+    BG: "#0c0b09",
+    SURFACE: "#161412",
+    BORDER: "#2a2620",
+    TEXT: "#c9bfad",
+    TEXT_DIM: "#c0b5a3",
+    WHITE: "#f0ebe0",
+    RED_DIM: "#3a1515",
+  },
+  light: {
+    GOLD_DIM: "rgba(200,164,78,0.12)",
+    BG: "#f5f3ef",
+    SURFACE: "#ffffff",
+    BORDER: "#ddd6cb",
+    TEXT: "#4a4135",
+    TEXT_DIM: "#7a7068",
+    WHITE: "#1a1510",
+    RED_DIM: "#fde8e8",
+  },
+};
+
+// Initialise theme from localStorage
+const savedTheme = (typeof localStorage !== 'undefined' && localStorage.getItem('ten31-theme')) || 'dark';
+let GOLD_DIM = THEMES[savedTheme].GOLD_DIM;
+let BG = THEMES[savedTheme].BG;
+let SURFACE = THEMES[savedTheme].SURFACE;
+let BORDER = THEMES[savedTheme].BORDER;
+let TEXT = THEMES[savedTheme].TEXT;
+let TEXT_DIM = THEMES[savedTheme].TEXT_DIM;
+let WHITE = THEMES[savedTheme].WHITE;
+let RED_DIM = THEMES[savedTheme].RED_DIM;
+
+function applyTheme(mode) {
+  const t = THEMES[mode];
+  GOLD_DIM = t.GOLD_DIM; BG = t.BG; SURFACE = t.SURFACE; BORDER = t.BORDER;
+  TEXT = t.TEXT; TEXT_DIM = t.TEXT_DIM; WHITE = t.WHITE; RED_DIM = t.RED_DIM;
+  if (typeof localStorage !== 'undefined') localStorage.setItem('ten31-theme', mode);
+  // Update meta theme-color
+  const meta = document.querySelector('meta[name="theme-color"]');
+  if (meta) meta.setAttribute('content', t.BG);
+}
 
 // ─── API helpers ────────────────────────────────────────────────────────────
 const API = "/api";
@@ -60,6 +96,8 @@ const SyncIcon = ({ syncing }) => <svg width="12" height="12" viewBox="0 0 12 12
 const BellIcon = ({ active }) => <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke={active ? GOLD : TEXT_DIM} strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><path d="M4 6a4 4 0 018 0c0 4 2 5 2 5H2s2-1 2-5"/><path d="M6.5 13a1.5 1.5 0 003 0"/>{active && <circle cx="12" cy="3" r="2" fill={GOLD} stroke="none"/>}</svg>;
 const MoveUpIcon = () => <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M7 11V3"/><path d="M3 6l4-4 4 4"/></svg>;
 const MoveDownIcon = () => <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"><path d="M7 3v8"/><path d="M3 8l4 4 4-4"/></svg>;
+const SunIcon = () => <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round"><circle cx="8" cy="8" r="3"/><line x1="8" y1="1" x2="8" y2="3"/><line x1="8" y1="13" x2="8" y2="15"/><line x1="1" y1="8" x2="3" y2="8"/><line x1="13" y1="8" x2="15" y2="8"/><line x1="3.05" y1="3.05" x2="4.46" y2="4.46"/><line x1="11.54" y1="11.54" x2="12.95" y2="12.95"/><line x1="3.05" y1="12.95" x2="4.46" y2="11.54"/><line x1="11.54" y1="4.46" x2="12.95" y2="3.05"/></svg>;
+const MoonIcon = () => <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><path d="M14 9.5A6 6 0 016.5 2a6 6 0 107.5 7.5z"/></svg>;
 
 // ─── Push Notification Helpers ──────────────────────────────────────────────
 function urlBase64ToUint8Array(base64String) {
@@ -142,10 +180,19 @@ function NotificationBell({ slug }) {
 }
 
 // ─── Homepage ───────────────────────────────────────────────────────────────
-function Homepage({ team, onSelectMember, onGoTeam }) {
+function Homepage({ team, onSelectMember, onGoTeam, themeMode, toggleTheme }) {
   return (
     <div style={{ maxWidth: 640, margin: "0 auto", padding: "0 20px 80px" }}>
-      <header style={{ paddingTop: 48, paddingBottom: 32, textAlign: "center" }}>
+      <header style={{ paddingTop: 48, paddingBottom: 32, textAlign: "center", position: "relative" }}>
+        <button onClick={toggleTheme} title={themeMode === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+          style={{
+            position: 'absolute', top: 48, right: 0, background: 'transparent',
+            border: `1px solid ${BORDER}`, borderRadius: 4, padding: '4px 6px',
+            cursor: 'pointer', display: 'flex', alignItems: 'center',
+            justifyContent: 'center', color: TEXT_DIM,
+          }}>
+          {themeMode === 'dark' ? <SunIcon /> : <MoonIcon />}
+        </button>
         <h1 style={{ fontFamily: SERIF, fontSize: 36, fontWeight: 700, color: WHITE, margin: 0, letterSpacing: "0.06em" }}>TEN31 TASKS</h1>
         <p style={{ fontFamily: MONO, fontSize: 11, color: GOLD, letterSpacing: "0.08em", marginTop: 8 }}>SIX THINGS. IN ORDER. STARTING WITH THE FIRST.</p>
       </header>
@@ -460,7 +507,14 @@ export default function App() {
   const [syncing, setSyncing] = useState(false);
   const [viewingMember, setViewingMember] = useState(null);
   const [showHome, setShowHome] = useState(false);
+  const [themeMode, setThemeMode] = useState(() => (typeof localStorage !== 'undefined' && localStorage.getItem('ten31-theme')) || 'dark');
   const inputRefs = useRef([]);
+
+  const toggleTheme = () => {
+    const next = themeMode === 'dark' ? 'light' : 'dark';
+    applyTheme(next);
+    setThemeMode(next);
+  };
 
   // ── Parse URL and load initial data ──
   useEffect(() => {
@@ -649,6 +703,8 @@ export default function App() {
           team={team}
           onSelectMember={selectMemberFromHome}
           onGoTeam={() => { setShowHome(false); setView("team"); }}
+          themeMode={themeMode}
+          toggleTheme={toggleTheme}
         />
       </div>
     );
@@ -681,6 +737,14 @@ export default function App() {
                 {team.find(m => m.slug === currentUser)?.name || currentUser}
               </span>
             )}
+            <button onClick={toggleTheme} title={themeMode === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+              style={{
+                background: 'transparent', border: `1px solid ${BORDER}`, borderRadius: 4,
+                padding: '4px 6px', cursor: 'pointer', display: 'flex', alignItems: 'center',
+                justifyContent: 'center', color: TEXT_DIM,
+              }}>
+              {themeMode === 'dark' ? <SunIcon /> : <MoonIcon />}
+            </button>
           </div>
         </header>
 
