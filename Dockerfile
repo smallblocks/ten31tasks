@@ -58,7 +58,7 @@ COPY backend/main.py /app/main.py
 COPY --from=frontend-build /app/dist /var/www/html
 
 # Nginx config
-COPY startos/nginx.conf /etc/nginx/sites-available/default
+COPY nginx.conf /etc/nginx/sites-available/default
 
 # Supervisord config
 COPY <<'SUPERVISOR' /etc/supervisor/conf.d/ten31.conf

@@ -11,38 +11,51 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
+
     steps:
       - uses: actions/checkout@v4
 
-      - name: Download start-cli
-        run: |
-          curl -L -o start-cli.tar.gz "https://github.com/smallblocks/staticrypt-startos/releases/download/tools-v1/start-cli-linux-x86_64.tar.gz"
-          tar xzf start-cli.tar.gz
-          chmod +x start-cli
-          sudo mv start-cli /usr/local/bin/
-
-      - name: Install squashfs-tools-ng
+      - name: Install system dependencies
         run: sudo apt-get update && sudo apt-get install -y squashfs-tools-ng
 
-      - name: Initialize signing key
-        run: start-cli init-key
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install start-cli
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release download tools-v1 --repo smallblocks/staticrypt-startos --pattern 'start-cli-linux-x86_64.tar.gz'
+          tar xzf start-cli-linux-x86_64.tar.gz
+          sudo mv start-cli /usr/local/bin/
+          start-cli --version
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build JavaScript
+        run: npm run build
 
       - name: Build Docker image
-        working-directory: ten31-tasks
-        run: docker build -t ten31-tasks:latest .
+        run: docker build -t localhost/ten31-tasks:latest .
 
-      - name: Tag image for start-cli
-        run: docker tag ten31-tasks:latest ten31-tasks:latest
+      - name: Initialize developer key
+        run: start-cli init-key
+
+      - name: Verify Docker image
+        run: docker images | grep ten31-tasks
 
       - name: Pack s9pk
-        working-directory: ten31-tasks
-        run: start-cli pack
+        run: start-cli s9pk pack . -o ten31-tasks.s9pk --arch x86_64
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
           name: ten31-tasks-s9pk
-          path: ten31-tasks/ten31-tasks.s9pk
+          path: ten31-tasks.s9pk
+          retention-days: 30
 
       - name: Upload to GitHub Release
         uses: softprops/action-gh-release@v2
@@ -50,6 +63,6 @@ jobs:
           tag_name: dev-latest
           name: Dev Build (Latest)
           prerelease: true
-          files: ten31-tasks/ten31-tasks.s9pk
+          files: ten31-tasks.s9pk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
