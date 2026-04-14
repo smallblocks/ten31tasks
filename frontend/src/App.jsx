@@ -208,7 +208,7 @@ function Homepage({ team, onSelectMember, onGoTeam }) {
       <section style={{ marginBottom: 40 }}>
         <h2 style={{ fontFamily: SERIF, fontSize: 22, color: WHITE, marginBottom: 16, borderBottom: `1px solid ${BORDER}`, paddingBottom: 12 }}>Team Accountability</h2>
         <p style={{ fontFamily: SANS, fontSize: 15, color: TEXT, lineHeight: 1.7 }}>
-          The team board shows what everyone is working on. Full visibility, so we are all moving the same direction. Your six tasks should be the highest use of your time. The work that compounds and gets us to where we need to be. The proof-of-work calendar keeps you honest to the team and to yourself. Green days are days you showed up. Red days are days you didn't.
+          The team board shows what everyone is working on. Full visibility, so we are all moving in the same direction. Your six tasks should be the highest use of your time. The work that compounds and gets us to where we need to be. The proof-of-work calendar keeps you honest to the team and to yourself. Green days are days you showed up. Red days are days you didn't. Notifications are there to remind us all what needs to be done.
         </p>
       </section>
 
