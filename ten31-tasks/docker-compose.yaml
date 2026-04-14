@@ -1,0 +1,13 @@
+version: "3.8"
+
+services:
+  ten31-tasks:
+    build: .
+    ports:
+      - "3000:80"
+    volumes:
+      - task-data:/data
+    restart: unless-stopped
+
+volumes:
+  task-data:
