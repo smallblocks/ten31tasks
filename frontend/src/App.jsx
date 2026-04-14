@@ -57,6 +57,87 @@ const CalIcon = () => <svg width="16" height="16" viewBox="0 0 16 16" fill="none
 const TeamIcon = () => <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><circle cx="6" cy="5" r="2.5"/><circle cx="11" cy="6" r="2"/><path d="M1 13c0-2.5 2-4 5-4s5 1.5 5 4"/><path d="M11 9c2 0 4 1 4 3"/></svg>;
 const XIcon = () => <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><line x1="3" y1="3" x2="11" y2="11"/><line x1="11" y1="3" x2="3" y2="11"/></svg>;
 const SyncIcon = ({ syncing }) => <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke={syncing ? GOLD : TEXT_DIM} strokeWidth="1.2" strokeLinecap="round" style={syncing ? { animation: "spin 1s linear infinite" } : {}}><path d="M1 6a5 5 0 019-2"/><path d="M11 6a5 5 0 01-9 2"/><polyline points="1 2 1 6 5 6" style={{ fill: "none" }}/><polyline points="11 10 11 6 7 6" style={{ fill: "none" }}/></svg>;
+const BellIcon = ({ active }) => <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke={active ? GOLD : TEXT_DIM} strokeWidth="1.3" strokeLinecap="round" strokeLinejoin="round"><path d="M4 6a4 4 0 018 0c0 4 2 5 2 5H2s2-1 2-5"/><path d="M6.5 13a1.5 1.5 0 003 0"/>{active && <circle cx="12" cy="3" r="2" fill={GOLD} stroke="none"/>}</svg>;
+
+// ─── Push Notification Helpers ──────────────────────────────────────────────
+function urlBase64ToUint8Array(base64String) {
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/');
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+  for (let i = 0; i < rawData.length; ++i) outputArray[i] = rawData.charCodeAt(i);
+  return outputArray;
+}
+
+async function subscribeToPush(slug) {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return null;
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const keyRes = await api('/push/vapid-public-key');
+    const sub = await reg.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(keyRes.publicKey),
+    });
+    await api('/push/subscribe', {
+      method: 'POST',
+      body: JSON.stringify({ slug, subscription: sub.toJSON() }),
+    });
+    return sub;
+  } catch (e) {
+    console.error('Push subscription failed:', e);
+    return null;
+  }
+}
+
+async function checkPushSubscription() {
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return false;
+  try {
+    const reg = await navigator.serviceWorker.ready;
+    const sub = await reg.pushManager.getSubscription();
+    return !!sub;
+  } catch { return false; }
+}
+
+// ─── Notification Bell ──────────────────────────────────────────────────────
+function NotificationBell({ slug }) {
+  const [enabled, setEnabled] = useState(false);
+  const [checking, setChecking] = useState(true);
+
+  useEffect(() => {
+    checkPushSubscription().then(v => { setEnabled(v); setChecking(false); });
+  }, []);
+
+  const toggle = async () => {
+    if (enabled) {
+      // Unsubscribe
+      try {
+        const reg = await navigator.serviceWorker.ready;
+        const sub = await reg.pushManager.getSubscription();
+        if (sub) await sub.unsubscribe();
+        await api(`/push/subscribe/${slug}`, { method: 'DELETE' });
+        setEnabled(false);
+      } catch (e) { console.error(e); }
+    } else {
+      // Subscribe
+      const sub = await subscribeToPush(slug);
+      if (sub) setEnabled(true);
+    }
+  };
+
+  if (checking || !('PushManager' in window)) return null;
+
+  return (
+    <button onClick={toggle} title={enabled ? 'Notifications on' : 'Enable notifications'}
+      style={{
+        background: enabled ? GOLD_DIM : 'transparent',
+        border: `1px solid ${enabled ? GOLD + '44' : BORDER}`,
+        borderRadius: 4, padding: '4px 6px', cursor: 'pointer', display: 'flex',
+        alignItems: 'center', justifyContent: 'center',
+      }}>
+      <BellIcon active={enabled} />
+    </button>
+  );
+}
 
 // ─── Homepage ───────────────────────────────────────────────────────────────
 function Homepage({ team, onSelectMember, onGoTeam }) {
@@ -616,6 +697,7 @@ export default function App() {
           </div>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <SyncIcon syncing={syncing} />
+            {currentUser && <NotificationBell slug={currentUser} />}
             {currentUser && (
               <span style={{ fontFamily: MONO, fontSize: 11, color: GOLD, border: `1px solid ${GOLD}33`, padding: "3px 10px", borderRadius: 4 }}>
                 {team.find(m => m.slug === currentUser)?.name || currentUser}

@@ -23,6 +23,8 @@ COPY <<'HTMLSHELL' index.html
   <link rel="preconnect" href="https://fonts.googleapis.com"/>
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&family=Playfair+Display:wght@700&display=swap" rel="stylesheet"/>
+  <link rel="manifest" href="/manifest.json"/>
+  <link rel="apple-touch-icon" href="/icon-192.png"/>
   <style>
     *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
     body { background: #0c0b09; -webkit-font-smoothing: antialiased; }
@@ -31,6 +33,11 @@ COPY <<'HTMLSHELL' index.html
 <body>
   <div id="root"></div>
   <script type="module" src="/src/main.jsx"></script>
+  <script>
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('/sw.js').catch(e => console.warn('SW registration failed:', e));
+    }
+  </script>
 </body>
 </html>
 HTMLSHELL
@@ -39,6 +46,12 @@ COPY frontend/src/main.jsx src/main.jsx
 COPY frontend/src/App.jsx src/App.jsx
 
 RUN npx vite build
+
+# PWA files must be at root (not bundled)
+COPY frontend/src/sw.js /app/dist/sw.js
+COPY frontend/src/manifest.json /app/dist/manifest.json
+COPY frontend/src/icon-192.png /app/dist/icon-192.png
+COPY frontend/src/icon-512.png /app/dist/icon-512.png
 
 # ─── Stage 2: Runtime — Python + nginx + supervisord ────────────────────────
 FROM python:3.12-slim

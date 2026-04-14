@@ -1,24 +1,69 @@
 """
 Ten31 Tasks — Backend API
-FastAPI + SQLite. Every mutation writes immediately. No save button.
+FastAPI + SQLite + Web Push. Every mutation writes immediately. No save button.
 """
 import json
 import os
 import sqlite3
+import traceback
 from contextlib import contextmanager
 from datetime import date, datetime
 from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 # ─── Config ──────────────────────────────────────────────────────────────────
 DB_PATH = os.environ.get("DB_PATH", "/data/ten31-tasks.db")
+VAPID_KEY_PATH = os.environ.get("VAPID_KEY_PATH", "/data/vapid")
+VAPID_CLAIMS_EMAIL = os.environ.get("VAPID_EMAIL", "mailto:admin@ten31.xyz")
 
 app = FastAPI(title="Ten31 Tasks", docs_url=None, redoc_url=None)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+
+# ─── VAPID Keys ──────────────────────────────────────────────────────────────
+vapid_private_key = None
+vapid_public_key = None
+
+def init_vapid():
+    """Generate VAPID keys on first run, load from disk thereafter."""
+    global vapid_private_key, vapid_public_key
+    priv_path = Path(VAPID_KEY_PATH) / "private_key.pem"
+    pub_path = Path(VAPID_KEY_PATH) / "public_key.txt"
+    
+    if priv_path.exists() and pub_path.exists():
+        vapid_private_key = priv_path.read_text().strip()
+        vapid_public_key = pub_path.read_text().strip()
+        print(f"VAPID keys loaded from {VAPID_KEY_PATH}")
+        return
+    
+    # Generate new keys
+    from py_vapid import Vapid
+    v = Vapid()
+    v.generate_keys()
+    
+    Path(VAPID_KEY_PATH).mkdir(parents=True, exist_ok=True)
+    
+    # Save private key PEM
+    priv_pem = v.private_pem()
+    if isinstance(priv_pem, bytes):
+        priv_pem = priv_pem.decode('utf-8')
+    priv_path.write_text(priv_pem)
+    
+    # Save public key as base64url (applicationServerKey for the browser)
+    import base64
+    raw = v.public_key.public_bytes(
+        encoding=__import__('cryptography').hazmat.primitives.serialization.Encoding.X962,
+        format=__import__('cryptography').hazmat.primitives.serialization.PublicFormat.UncompressedPoint,
+    )
+    pub_b64 = base64.urlsafe_b64encode(raw).decode('utf-8').rstrip('=')
+    pub_path.write_text(pub_b64)
+    
+    vapid_private_key = priv_pem
+    vapid_public_key = pub_b64
+    print(f"VAPID keys generated and saved to {VAPID_KEY_PATH}")
 
 
 # ─── Database ────────────────────────────────────────────────────────────────
@@ -41,6 +86,15 @@ def init_db():
                 PRIMARY KEY (slug, date)
             )
         """)
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS push_subscriptions (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                slug TEXT NOT NULL,
+                subscription TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                UNIQUE(slug, subscription)
+            )
+        """)
         db.commit()
 
 
@@ -57,6 +111,7 @@ def get_db():
 @app.on_event("startup")
 def startup():
     init_db()
+    init_vapid()
 
 
 # ─── Models ──────────────────────────────────────────────────────────────────
@@ -83,6 +138,11 @@ class DayUpdate(BaseModel):
     locked: Optional[bool] = None
     lockedAt: Optional[str] = None
     reflection: Optional[str] = None
+
+
+class PushSubscription(BaseModel):
+    slug: str
+    subscription: dict
 
 
 # ─── Team endpoints ──────────────────────────────────────────────────────────
@@ -113,6 +173,7 @@ def remove_member(slug: str):
     with get_db() as db:
         db.execute("DELETE FROM team WHERE slug = ?", (slug,))
         db.execute("DELETE FROM days WHERE slug = ?", (slug,))
+        db.execute("DELETE FROM push_subscriptions WHERE slug = ?", (slug,))
         db.commit()
     return {"deleted": slug}
 
@@ -178,7 +239,39 @@ def update_day(slug: str, day_date: str, update: DayUpdate):
         return existing
 
 
-# ─── Reminder endpoints ──────────────────────────────────────────────────────
+# ─── Push Subscription endpoints ─────────────────────────────────────────────
+@app.get("/api/push/vapid-public-key")
+def get_vapid_public_key():
+    """Return the VAPID public key for the browser to subscribe."""
+    return {"publicKey": vapid_public_key}
+
+
+@app.post("/api/push/subscribe")
+def subscribe_push(sub: PushSubscription):
+    """Register a push subscription for a team member."""
+    sub_json = json.dumps(sub.subscription, sort_keys=True)
+    with get_db() as db:
+        try:
+            db.execute(
+                "INSERT OR REPLACE INTO push_subscriptions (slug, subscription) VALUES (?, ?)",
+                (sub.slug, sub_json)
+            )
+            db.commit()
+        except Exception as e:
+            raise HTTPException(500, f"Failed to save subscription: {e}")
+    return {"status": "subscribed", "slug": sub.slug}
+
+
+@app.delete("/api/push/subscribe/{slug}")
+def unsubscribe_push(slug: str):
+    """Remove all push subscriptions for a member."""
+    with get_db() as db:
+        db.execute("DELETE FROM push_subscriptions WHERE slug = ?", (slug,))
+        db.commit()
+    return {"status": "unsubscribed", "slug": slug}
+
+
+# ─── Reminder endpoints ─────────────────────────────────────────────────────
 @app.get("/api/reminders/pending")
 def reminders_pending():
     """
@@ -243,6 +336,92 @@ def reminders_pending():
             "pending": pending,
             "all_clear": len(pending) == 0,
         }
+
+
+@app.post("/api/reminders/send")
+def send_reminders():
+    """
+    Check who's behind and send push notifications to their devices.
+    Called by external cron or manually.
+    """
+    from pywebpush import webpush, WebPushException
+    
+    today_str = date.today().isoformat()
+    pending_data = reminders_pending()
+    
+    if pending_data["all_clear"]:
+        return {"sent": 0, "message": "All clear — everyone is on track!"}
+    
+    sent_count = 0
+    errors = []
+    
+    with get_db() as db:
+        for member in pending_data["pending"]:
+            slug = member["slug"]
+            
+            # Get push subscriptions for this member
+            subs = db.execute(
+                "SELECT id, subscription FROM push_subscriptions WHERE slug = ?",
+                (slug,)
+            ).fetchall()
+            
+            if not subs:
+                continue
+            
+            # Build notification payload
+            if member["reason"] == "not_committed":
+                payload = json.dumps({
+                    "title": "📋 Commit your six",
+                    "body": "You haven't locked in your tasks for today. What's most important?",
+                    "url": f"/list/{slug}",
+                    "tag": f"ten31-tasks-{today_str}",
+                })
+            else:
+                remaining = member.get("remaining", [])
+                done = member.get("done", 0)
+                total = member.get("total", 0)
+                top_remaining = remaining[0] if remaining else "your tasks"
+                payload = json.dumps({
+                    "title": f"⏳ {done}/{total} done — keep going",
+                    "body": f"Next up: {top_remaining}",
+                    "url": f"/list/{slug}",
+                    "tag": f"ten31-tasks-{today_str}",
+                })
+            
+            stale_sub_ids = []
+            for sub_row in subs:
+                sub_data = json.loads(sub_row["subscription"])
+                try:
+                    webpush(
+                        subscription_info=sub_data,
+                        data=payload,
+                        vapid_private_key=vapid_private_key,
+                        vapid_claims={"sub": VAPID_CLAIMS_EMAIL},
+                    )
+                    sent_count += 1
+                except WebPushException as e:
+                    if "410" in str(e) or "404" in str(e):
+                        # Subscription expired or invalid — clean up
+                        stale_sub_ids.append(sub_row["id"])
+                    else:
+                        errors.append(f"{slug}: {str(e)[:100]}")
+                except Exception as e:
+                    errors.append(f"{slug}: {str(e)[:100]}")
+            
+            # Remove stale subscriptions
+            for sid in stale_sub_ids:
+                db.execute("DELETE FROM push_subscriptions WHERE id = ?", (sid,))
+            if stale_sub_ids:
+                db.commit()
+    
+    result = {
+        "sent": sent_count,
+        "pending_members": len(pending_data["pending"]),
+    }
+    if errors:
+        result["errors"] = errors
+    
+    return result
 
 
 # ─── Bulk endpoint for team board ────────────────────────────────────────────
