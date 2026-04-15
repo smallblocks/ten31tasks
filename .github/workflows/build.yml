@@ -2,7 +2,7 @@ name: Build s9pk
 
 on:
   push:
-    branches: [main]
+    branches: [main, fold-build]
   workflow_dispatch:
 
 permissions:
@@ -39,22 +39,22 @@ jobs:
         run: npm run build
 
       - name: Build Docker image
-        run: docker build -t localhost/ten31-tasks:latest .
+        run: docker build -t localhost/fold-tasks:latest .
 
       - name: Initialize developer key
         run: start-cli init-key
 
       - name: Verify Docker image
-        run: docker images | grep ten31-tasks
+        run: docker images | grep fold-tasks
 
       - name: Pack s9pk
-        run: start-cli s9pk pack . -o ten31-tasks.s9pk --arch x86_64
+        run: start-cli s9pk pack . -o fold-tasks.s9pk --arch x86_64
 
       - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ten31-tasks-s9pk
-          path: ten31-tasks.s9pk
+          name: fold-tasks-s9pk
+          path: fold-tasks.s9pk
           retention-days: 30
 
       - name: Upload to GitHub Release
@@ -63,6 +63,6 @@ jobs:
           tag_name: dev-latest
           name: Dev Build (Latest)
           prerelease: true
-          files: ten31-tasks.s9pk
+          files: fold-tasks.s9pk
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
