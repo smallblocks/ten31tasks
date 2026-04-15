@@ -300,12 +300,14 @@ const setCompanyNameAction = Action.withInput(
   async ({ input }) => {
     try {
       const body: Record<string, string> = {}
-      if (input.companyName.trim()) body.company_name = input.companyName.trim()
-      if (input.tagline !== undefined) body.company_tagline = input.tagline.trim()
+      const name = (input.companyName || '').trim()
+      const tagline = (input.tagline || '').trim()
+      if (name) body.company_name = name
+      body.company_tagline = tagline
 
       await apiRequest('PUT', '/api/settings', body)
 
-      const name = input.companyName.trim() || 'Ten31'
+      const name = (input.companyName || '').trim() || 'Ten31'
       return {
         version: '1' as const,
         title: 'Company Name Updated',
