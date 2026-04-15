@@ -71,7 +71,7 @@ function useDebounce(fn, ms) {
 }
 
 // ─── Date Helpers ───────────────────────────────────────────────────────────
-const fmt = (d) => d.toISOString().slice(0, 10);
+const fmt = (d) => `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 const today = () => fmt(new Date());
 const dayLabel = (iso) => new Date(iso + "T12:00:00").toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
 const shiftDay = (iso, n) => { const d = new Date(iso + "T12:00:00"); d.setDate(d.getDate() + n); return fmt(d); };
