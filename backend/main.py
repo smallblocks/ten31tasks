@@ -342,19 +342,24 @@ PUBLIC_PATHS = {
 
 @app.middleware("http")
 async def auth_middleware(request: Request, call_next):
-    """Protect all /api/ routes (except public ones) when auth is enabled."""
+    """Protect all /api/ routes (except public ones) when auth is enabled.
+    Localhost requests (from StartOS Actions) always bypass auth."""
     path = request.url.path
     if path.startswith("/api/") and path not in PUBLIC_PATHS:
-        with get_db() as db:
-            if auth_enabled(db):
-                token = request.cookies.get(SESSION_COOKIE)
-                slug = get_session_slug(db, token)
-                if not slug:
-                    return Response(
-                        content=json.dumps({"detail": "Not authenticated"}),
-                        status_code=401,
-                        media_type="application/json",
-                    )
+        # StartOS actions call from 127.0.0.1 — always allow
+        client_host = request.client.host if request.client else None
+        is_localhost = client_host in ("127.0.0.1", "::1", "localhost")
+        if not is_localhost:
+            with get_db() as db:
+                if auth_enabled(db):
+                    token = request.cookies.get(SESSION_COOKIE)
+                    slug = get_session_slug(db, token)
+                    if not slug:
+                        return Response(
+                            content=json.dumps({"detail": "Not authenticated"}),
+                            status_code=401,
+                            media_type="application/json",
+                        )
     response = await call_next(request)
     return response
 
