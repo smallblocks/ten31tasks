@@ -43,20 +43,30 @@ const addMemberAction = Action.withInput(
       placeholder: 'jonathan',
       default: '',
     }),
+    pin: Value.text({
+      name: 'PIN',
+      description: 'Login PIN for this member (4+ digits recommended). Leave blank to add without auth.',
+      required: false,
+      placeholder: '1234',
+      default: '',
+    }),
   }),
-  async () => ({ name: '', slug: '' }),
+  async () => ({ name: '', slug: '', pin: '' }),
   async ({ input }) => {
     try {
-      const result = await apiRequest('POST', '/api/team', {
+      const body: Record<string, string> = {
         name: input.name.trim(),
         slug: input.slug.trim().toLowerCase(),
-      })
+      }
+      if (input.pin && (input.pin as string).trim()) body.pin = (input.pin as string).trim()
+      const result = await apiRequest('POST', '/api/team', body)
 
       if (result.slug) {
+        const pinNote = (input.pin && (input.pin as string).trim()) ? ' PIN has been set.' : ' No PIN set — auth will not be required until a PIN is set for at least one member.'
         return {
           version: '1' as const,
           title: 'Member Added',
-          message: `${result.name} has been added. Their task list is at /list/${result.slug}`,
+          message: `${result.name} has been added. Their task list is at /list/${result.slug}.${pinNote}`,
           result: null,
         }
       } else {
@@ -325,9 +335,77 @@ const setCompanyNameAction = Action.withInput(
   },
 )
 
+// Set Member PIN Action
+const setMemberPinAction = Action.withInput(
+  'set-member-pin',
+  {
+    name: 'Set Member PIN',
+    description: 'Set or reset the login PIN for a team member. This will log them out of all devices.',
+    warning: null,
+    allowedStatuses: 'only-running',
+    group: null,
+    visibility: 'enabled',
+  },
+  InputSpec.of({
+    slug: Value.text({
+      name: 'Member Slug',
+      description: 'The slug of the member (e.g., jonathan)',
+      required: true,
+      placeholder: 'jonathan',
+      default: '',
+    }),
+    pin: Value.text({
+      name: 'New PIN',
+      description: 'New login PIN (4+ digits recommended)',
+      required: true,
+      placeholder: '1234',
+      default: '',
+    }),
+  }),
+  async () => ({ slug: '', pin: '' }),
+  async ({ input }) => {
+    try {
+      const memberSlug = (input.slug || '').trim().toLowerCase()
+      const memberPin = (input.pin || '').trim()
+      if (!memberSlug || !memberPin) {
+        return {
+          version: '1' as const,
+          title: 'Error',
+          message: 'Both slug and PIN are required.',
+          result: null,
+        }
+      }
+      const result = await apiRequest('PUT', `/api/team/${memberSlug}/pin`, { pin: memberPin })
+      if (result.pinSet) {
+        return {
+          version: '1' as const,
+          title: 'PIN Updated',
+          message: `PIN has been set for ${memberSlug}. They will need to log in again on all devices. Note: authentication is now enabled for all members.`,
+          result: null,
+        }
+      } else {
+        return {
+          version: '1' as const,
+          title: 'Error',
+          message: result.detail || 'Failed to set PIN',
+          result: null,
+        }
+      }
+    } catch (e) {
+      return {
+        version: '1' as const,
+        title: 'Error',
+        message: `Failed to set PIN: ${e}`,
+        result: null,
+      }
+    }
+  },
+)
+
 export const actions = sdk.Actions.of()
   .addAction(setCompanyNameAction)
   .addAction(addMemberAction)
+  .addAction(setMemberPinAction)
   .addAction(removeMemberAction)
   .addAction(listMembersAction)
   .addAction(setTimezoneAction)
