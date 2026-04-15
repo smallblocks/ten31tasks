@@ -300,18 +300,18 @@ const setCompanyNameAction = Action.withInput(
   async ({ input }) => {
     try {
       const body: Record<string, string> = {}
-      const name = (input.companyName || '').trim()
-      const tagline = (input.tagline || '').trim()
-      if (name) body.company_name = name
-      body.company_tagline = tagline
+      const compName = (input.companyName || '').trim()
+      const compTagline = (input.tagline || '').trim()
+      if (compName) body.company_name = compName
+      body.company_tagline = compTagline
 
       await apiRequest('PUT', '/api/settings', body)
 
-      const name = (input.companyName || '').trim() || 'Ten31'
+      const displayName = (input.companyName || '').trim() || 'Ten31'
       return {
         version: '1' as const,
         title: 'Company Name Updated',
-        message: `App will now display as "${name} Tasks". Refresh the browser to see the change.`,
+        message: `App will now display as "${displayName} Tasks". Refresh the browser to see the change.`,
         result: null,
       }
     } catch (e) {
