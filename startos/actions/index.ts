@@ -187,7 +187,6 @@ const setTimezoneAction = Action.withInput(
     timezone: Value.select({
       name: 'Timezone',
       description: 'Select your timezone for reminder scheduling',
-      required: true,
       default: 'America/Chicago',
       values: {
         'America/New_York': 'Eastern (US)',
