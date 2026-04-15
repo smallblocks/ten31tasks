@@ -80,12 +80,13 @@ const daysInMonth = (y, m) => new Date(y, m + 1, 0).getDate();
 const firstDayOfWeek = (y, m) => new Date(y, m, 1).getDay();
 
 const blankDay = () => ({
-  items: Array.from({ length: 6 }, () => ({ text: "", done: false })),
+  items: Array.from({ length: 6 }, () => ({ text: "", worked: false, done: false })),
   locked: false, lockedAt: null, reflection: "",
 });
 
 // ─── Icons ──────────────────────────────────────────────────────────────────
 const CheckIcon = () => <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="4 9 7.5 12.5 14 5.5"/></svg>;
+const HammerIcon = () => <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"><path d="M9.5 6.5L13 10l-1.5 1.5L8 8"/><path d="M6 3l3 3-2 2-3-3a2 2 0 012-2z"/><path d="M3 10l3 3"/><path d="M2 13l1.5-1.5"/></svg>;
 const LockIcon = () => <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="6" width="8" height="6" rx="1"/><path d="M5 6V4a2 2 0 014 0v2"/></svg>;
 const ChevronLeft = () => <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><polyline points="12 4 6 10 12 16"/></svg>;
 const ChevronRight = () => <svg width="20" height="20" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round"><polyline points="8 4 14 10 8 16"/></svg>;
@@ -269,13 +270,9 @@ function CalendarHeatmap({ days, selectedDate, onSelect }) {
     const entry = days[iso];
     if (!entry?.locked) return iso < todayStr ? RED_DIM : "transparent";
     const total = entry.items.filter(i => i.text).length;
-    const done = entry.items.filter(i => i.text && i.done).length;
     if (total === 0) return "transparent";
-    const pct = done / total;
-    if (pct === 1) return "#2a3a1a";
-    if (pct >= 0.66) return "#1f2e18";
-    if (pct >= 0.33) return "#2a2615";
-    return "#2a1a15";
+    const workedAny = entry.items.some(i => i.text && (i.worked || i.done));
+    return workedAny ? "#2a3a1a" : RED_DIM;
   };
 
   const getCompletionDot = (day) => {
@@ -286,26 +283,25 @@ function CalendarHeatmap({ days, selectedDate, onSelect }) {
     const done = entry.items.filter(i => i.text && i.done).length;
     if (total === 0) return null;
     if (done === total) return GOLD;
-    if (done / total >= 0.5) return "#6a6240";
-    return "#4a3020";
+    return null;
   };
 
   const monthStats = useMemo(() => {
-    let committed = 0, totalDone = 0, totalTasks = 0, perfectDays = 0;
+    let committed = 0, totalDone = 0, totalTasks = 0, perfectDays = 0, workedDays = 0;
     for (let dd = 1; dd <= dim; dd++) {
       const entry = days[isoFor(dd)];
       if (entry?.locked) {
         committed++;
         const t = entry.items.filter(i => i.text).length;
         const dn = entry.items.filter(i => i.text && i.done).length;
+        const workedAny = entry.items.some(i => i.text && (i.worked || i.done));
         totalTasks += t; totalDone += dn;
         if (t > 0 && dn === t) perfectDays++;
+        if (workedAny) workedDays++;
       }
     }
-    return { committed, totalDone, totalTasks, perfectDays };
+    return { committed, totalDone, totalTasks, perfectDays, workedDays };
   }, [days, calYear, calMonth, dim]);
-
-  const rate = monthStats.totalTasks > 0 ? Math.round((monthStats.totalDone / monthStats.totalTasks) * 100) : 0;
 
   return (
     <div style={{ marginBottom: 24 }}>
@@ -337,15 +333,15 @@ function CalendarHeatmap({ days, selectedDate, onSelect }) {
         })}
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 8, marginTop: 16, padding: "14px 0", borderTop: `1px solid ${BORDER}`, borderBottom: `1px solid ${BORDER}` }}>
-        {[{ label: "COMMITTED", value: monthStats.committed }, { label: "DONE", value: monthStats.totalDone }, { label: "RATE", value: `${rate}%` }, { label: "PERFECT", value: monthStats.perfectDays }].map((s, i) => (
+        {[{ label: "COMMITTED", value: monthStats.committed }, { label: "WORKED", value: monthStats.workedDays }, { label: "DONE", value: monthStats.totalDone }, { label: "PERFECT", value: monthStats.perfectDays }].map((s, i) => (
           <div key={i} style={{ textAlign: "center" }}>
-            <div style={{ fontFamily: SERIF, fontSize: 20, color: i === 2 && rate >= 80 ? GOLD : WHITE, fontWeight: 700 }}>{s.value}</div>
+            <div style={{ fontFamily: SERIF, fontSize: 20, color: WHITE, fontWeight: 700 }}>{s.value}</div>
             <div style={{ fontFamily: MONO, fontSize: 8, color: TEXT_DIM, letterSpacing: "0.1em", marginTop: 3 }}>{s.label}</div>
           </div>
         ))}
       </div>
       <div style={{ display: "flex", gap: 16, justifyContent: "center", marginTop: 12 }}>
-        {[{ color: "#2a3a1a", label: "All done" }, { color: "#2a2615", label: "Partial" }, { color: RED_DIM, label: "Missed" }].map((l, i) => (
+        {[{ color: "#2a3a1a", label: "Worked" }, { color: RED_DIM, label: "Didn't" }].map((l, i) => (
           <div key={i} style={{ display: "flex", alignItems: "center", gap: 5 }}>
             <div style={{ width: 10, height: 10, borderRadius: 3, background: l.color, border: `1px solid ${BORDER}` }} />
             <span style={{ fontFamily: MONO, fontSize: 9, color: TEXT_DIM }}>{l.label}</span>
@@ -371,6 +367,7 @@ function TeamBoard({ teamData, onSelectMember }) {
         const committed = todayEntry?.locked || false;
         const total = todayEntry ? todayEntry.items.filter(i => i.text).length : 0;
         const done = todayEntry ? todayEntry.items.filter(i => i.text && i.done).length : 0;
+        const worked = todayEntry ? todayEntry.items.filter(i => i.text && (i.worked || i.done)).length : 0;
         const pct = total > 0 ? Math.round((done / total) * 100) : 0;
 
         let streak = 0, d = todayStr;
@@ -385,7 +382,6 @@ function TeamBoard({ teamData, onSelectMember }) {
             weekDone += entry.items.filter(it => it.text && it.done).length;
           }
         }
-        const weekRate = weekTotal > 0 ? Math.round((weekDone / weekTotal) * 100) : 0;
 
         return (
           <button key={member.slug} onClick={() => onSelectMember(member.slug)}
@@ -405,12 +401,12 @@ function TeamBoard({ teamData, onSelectMember }) {
                 <div>
                   <div style={{ fontFamily: SANS, fontSize: 15, color: WHITE, fontWeight: 500 }}>{member.name}</div>
                   <div style={{ fontFamily: MONO, fontSize: 10, color: TEXT_DIM }}>
-                    {committed ? `${done}/${total} done` : "not committed"}{streak > 1 ? ` · ${streak}d streak` : ""}
+                    {committed ? `${worked}/${total} worked · ${done} done` : "not committed"}{streak > 1 ? ` · ${streak}d streak` : ""}
                   </div>
                 </div>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <div style={{ fontFamily: MONO, fontSize: 10, color: TEXT_DIM }}>{weekRate}% / 7d</div>
+                <div style={{ fontFamily: MONO, fontSize: 10, color: TEXT_DIM }}>{weekDone} done / 7d</div>
                 {committed && pct === 100 && <span style={{ color: GOLD, fontSize: 16 }}>✦</span>}
               </div>
             </div>
@@ -418,7 +414,7 @@ function TeamBoard({ teamData, onSelectMember }) {
               <div style={{ display: "flex", flexDirection: "column", gap: 2, paddingLeft: 42 }}>
                 {todayEntry.items.filter(i => i.text).map((item, idx) => (
                   <div key={idx} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <span style={{ fontFamily: MONO, fontSize: 10, color: item.done ? GOLD : TEXT_DIM, width: 12 }}>{item.done ? "✓" : "○"}</span>
+                    <span style={{ fontFamily: MONO, fontSize: 10, color: item.done ? GOLD : item.worked ? `${GOLD}88` : TEXT_DIM, width: 12 }}>{item.done ? "✓" : item.worked ? "⚒" : "○"}</span>
                     <span style={{ fontFamily: SANS, fontSize: 13, color: item.done ? TEXT_DIM : TEXT, textDecoration: item.done ? "line-through" : "none" }}>{item.text}</span>
                   </div>
                 ))}
@@ -571,7 +567,7 @@ export default function App() {
     if (!canEdit) return;
     const d = structuredClone(activeDays[selectedDate] || blankDay());
     Object.assign(d.items[idx], patch);
-    updateDay(selectedDate, d, patch.done !== undefined);
+    updateDay(selectedDate, d, patch.done !== undefined || patch.worked !== undefined);
   };
 
   const moveItem = (idx, direction) => {
@@ -616,7 +612,11 @@ export default function App() {
     const d = structuredClone(activeDays[tomorrow] || blankDay());
     const unfinished = day.items.filter(i => i.text && !i.done);
     unfinished.forEach((item, idx) => {
-      if (idx < 6 && !d.items[idx].text) d.items[idx].text = item.text;
+      if (idx < 6 && !d.items[idx].text) {
+        d.items[idx].text = item.text;
+        d.items[idx].worked = false;
+        d.items[idx].done = false;
+      }
     });
     updateDay(tomorrow, d, true);
     setSelectedDate(tomorrow);
@@ -663,6 +663,7 @@ export default function App() {
 
   const streak = activeSlug ? calcStreak(activeDays) : 0;
   const filledItems = day.items.filter(i => i.text).length;
+  const workedItems = day.items.filter(i => i.text && (i.worked || i.done)).length;
   const doneItems = day.items.filter(i => i.text && i.done).length;
 
   return (
@@ -787,10 +788,22 @@ export default function App() {
                           {item.text || <span style={{ color: "#333" }}>—</span>}
                         </span>
                         {item.text && canEdit && day.locked && (
-                          <button onClick={() => updateItem(idx, { done: !item.done })} style={{
-                            background: item.done ? GOLD_DIM : "transparent", border: item.done ? `1px solid ${GOLD}66` : `1px solid ${BORDER}`,
-                            borderRadius: 4, color: item.done ? GOLD : TEXT_DIM, width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", flexShrink: 0,
-                          }}><CheckIcon /></button>
+                          <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
+                            <button onClick={() => updateItem(idx, { worked: !item.worked })} title="Worked on it" style={{
+                              background: item.worked ? "rgba(200,164,78,0.08)" : "transparent", border: item.worked ? `1px solid ${GOLD}44` : `1px solid ${BORDER}`,
+                              borderRadius: 4, color: item.worked ? GOLD : TEXT_DIM, width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
+                            }}><HammerIcon /></button>
+                            <button onClick={() => updateItem(idx, { done: !item.done, worked: !item.done ? true : item.worked })} title="Completed" style={{
+                              background: item.done ? GOLD_DIM : "transparent", border: item.done ? `1px solid ${GOLD}66` : `1px solid ${BORDER}`,
+                              borderRadius: 4, color: item.done ? GOLD : TEXT_DIM, width: 28, height: 28, display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer",
+                            }}><CheckIcon /></button>
+                          </div>
+                        )}
+                        {item.text && !canEdit && day.locked && (
+                          <div style={{ display: "flex", gap: 4, flexShrink: 0 }}>
+                            {item.worked && <span title="Worked on" style={{ color: `${GOLD}88`, fontSize: 12, display: "flex" }}><HammerIcon /></span>}
+                            {item.done && <span title="Completed" style={{ color: GOLD, fontSize: 12, display: "flex" }}><CheckIcon /></span>}
+                          </div>
                         )}
                       </div>
                     ) : (
@@ -839,10 +852,11 @@ export default function App() {
 
             {day.locked && filledItems > 0 && (
               <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 16 }}>
-                <div style={{ flex: 1, height: 3, background: BORDER, borderRadius: 2, overflow: "hidden" }}>
-                  <div style={{ height: "100%", background: GOLD, borderRadius: 2, width: `${(doneItems / filledItems) * 100}%`, transition: "width 0.4s ease" }} />
+                <div style={{ flex: 1, height: 3, background: BORDER, borderRadius: 2, overflow: "hidden", position: "relative" }}>
+                  <div style={{ position: "absolute", top: 0, left: 0, height: "100%", background: `${GOLD}44`, borderRadius: 2, width: `${(workedItems / filledItems) * 100}%`, transition: "width 0.4s ease" }} />
+                  <div style={{ position: "absolute", top: 0, left: 0, height: "100%", background: GOLD, borderRadius: 2, width: `${(doneItems / filledItems) * 100}%`, transition: "width 0.4s ease" }} />
                 </div>
-                <span style={{ fontFamily: MONO, fontSize: 11, color: TEXT_DIM }}>{doneItems}/{filledItems}</span>
+                <span style={{ fontFamily: MONO, fontSize: 11, color: TEXT_DIM }}>{doneItems}✓ {workedItems > doneItems ? `${workedItems - doneItems}⚒` : ""}</span>
               </div>
             )}
 

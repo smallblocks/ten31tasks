@@ -154,6 +154,7 @@ class TeamMember(BaseModel):
 
 class DayItem(BaseModel):
     text: str = ""
+    worked: bool = False
     done: bool = False
 
 
@@ -372,13 +373,14 @@ def reminders_pending():
             items = day_data.get("items", [])
             total = len([i for i in items if i.get("text")])
             done = len([i for i in items if i.get("text") and i.get("done")])
+            worked = len([i for i in items if i.get("text") and i.get("worked")])
             
             if total > 0 and done < total:
                 pending.append({
                     "slug": slug, "name": m["name"],
                     "reason": "incomplete",
-                    "done": done, "total": total,
-                    "message": f"{m['name']} has {done}/{total} tasks done.",
+                    "done": done, "worked": worked, "total": total,
+                    "message": f"{m['name']} has {done}/{total} complete ({worked} worked on).",
                     "remaining": [i.get("text") for i in items if i.get("text") and not i.get("done")],
                 })
             elif total > 0 and done == total and not day_data.get("reflection"):
@@ -453,14 +455,16 @@ def get_reflections(slug: str, period: Optional[str] = None, start: Optional[str
             total = len([i for i in items if i.get("text")])
             done = len([i for i in items if i.get("text") and i.get("done")])
             
+            worked = len([i for i in items if i.get("text") and i.get("worked")])
             reflections.append({
                 "date": r["date"],
                 "reflection": reflection_text,
                 "tasks_planned": [i.get("text") for i in items if i.get("text")],
                 "tasks_completed": [i.get("text") for i in items if i.get("text") and i.get("done")],
-                "tasks_incomplete": [i.get("text") for i in items if i.get("text") and not i.get("done")],
+                "tasks_worked": [i.get("text") for i in items if i.get("text") and i.get("worked")],
+                "tasks_incomplete": [i.get("text") for i in items if i.get("text") and not i.get("done") and not i.get("worked")],
                 "completion": f"{done}/{total}" if total > 0 else "0/0",
-                "completion_pct": round((done / total) * 100) if total > 0 else 0,
+                "worked_count": worked,
             })
         
         return {
@@ -552,6 +556,7 @@ def _send_push_reminders(checkpoint=None):
             items = day_data.get("items", []) if day_data else []
             total = len([i for i in items if i.get("text")])
             done = len([i for i in items if i.get("text") and i.get("done")])
+            worked_on = len([i for i in items if i.get("text") and i.get("worked")])
             has_reflection = bool(day_data.get("reflection")) if day_data else False
             
             # Determine which checkpoint applies
