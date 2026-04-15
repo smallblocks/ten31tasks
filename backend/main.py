@@ -3,8 +3,10 @@ Team Tasks — Backend API
 FastAPI + SQLite + Web Push + Built-in Reminder Scheduler.
 Every mutation writes immediately. No save button.
 """
+import hashlib
 import json
 import os
+import secrets
 import sqlite3
 import threading
 import time
@@ -14,7 +16,7 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import Cookie, FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
@@ -23,8 +25,11 @@ DB_PATH = os.environ.get("DB_PATH", "/data/ten31-tasks.db")
 VAPID_KEY_PATH = os.environ.get("VAPID_KEY_PATH", "/data/vapid")
 VAPID_CLAIMS_EMAIL = os.environ.get("VAPID_EMAIL", "mailto:admin@ten31.xyz")
 
+SESSION_COOKIE = "tasks_session"
+SESSION_MAX_AGE = 90 * 24 * 3600  # 90 days
+
 app = FastAPI(title="Team Tasks", docs_url=None, redoc_url=None)
-app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
+app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"], allow_credentials=True)
 
 # ─── VAPID Keys ──────────────────────────────────────────────────────────────
 vapid_private_key = None
@@ -76,7 +81,21 @@ def init_db():
             CREATE TABLE IF NOT EXISTS team (
                 slug TEXT PRIMARY KEY,
                 name TEXT NOT NULL,
+                pin_hash TEXT,
                 created_at TEXT NOT NULL DEFAULT (datetime('now'))
+            )
+        """)
+        # Migrate: add pin_hash column if missing (existing installs)
+        try:
+            db.execute("ALTER TABLE team ADD COLUMN pin_hash TEXT")
+        except sqlite3.OperationalError:
+            pass  # column already exists
+        db.execute("""
+            CREATE TABLE IF NOT EXISTS sessions (
+                token TEXT PRIMARY KEY,
+                slug TEXT NOT NULL,
+                created_at TEXT NOT NULL DEFAULT (datetime('now')),
+                expires_at TEXT NOT NULL
             )
         """)
         db.execute("""
@@ -148,10 +167,65 @@ def startup():
     start_reminder_scheduler()
 
 
+# ─── Auth helpers ──────────────────────────────────────────────────────────
+def hash_pin(pin: str) -> str:
+    """Hash a PIN with SHA-256. Simple and sufficient for short PINs."""
+    return hashlib.sha256(pin.encode('utf-8')).hexdigest()
+
+
+def verify_pin(pin: str, pin_hash: str) -> bool:
+    return hash_pin(pin) == pin_hash
+
+
+def create_session(db, slug: str) -> str:
+    """Create a new session token, return it."""
+    token = secrets.token_urlsafe(32)
+    expires = (datetime.utcnow() + timedelta(seconds=SESSION_MAX_AGE)).isoformat()
+    db.execute(
+        "INSERT INTO sessions (token, slug, expires_at) VALUES (?, ?, ?)",
+        (token, slug, expires)
+    )
+    db.commit()
+    return token
+
+
+def get_session_slug(db, token: str) -> Optional[str]:
+    """Validate session token, return slug or None."""
+    if not token:
+        return None
+    row = db.execute(
+        "SELECT slug, expires_at FROM sessions WHERE token = ?",
+        (token,)
+    ).fetchone()
+    if not row:
+        return None
+    if row["expires_at"] < datetime.utcnow().isoformat():
+        db.execute("DELETE FROM sessions WHERE token = ?", (token,))
+        db.commit()
+        return None
+    return row["slug"]
+
+
+def require_auth(request: Request, db) -> str:
+    """Check session cookie, return slug or raise 401."""
+    token = request.cookies.get(SESSION_COOKIE)
+    slug = get_session_slug(db, token)
+    if not slug:
+        raise HTTPException(status_code=401, detail="Not authenticated")
+    return slug
+
+
+def auth_enabled(db) -> bool:
+    """Auth is enabled if ANY team member has a PIN set."""
+    row = db.execute("SELECT 1 FROM team WHERE pin_hash IS NOT NULL LIMIT 1").fetchone()
+    return row is not None
+
+
 # ─── Models ──────────────────────────────────────────────────────────────────
 class TeamMember(BaseModel):
     name: str
     slug: str
+    pin: Optional[str] = None
 
 
 class DayItem(BaseModel):
@@ -179,6 +253,11 @@ class PushSubscription(BaseModel):
     subscription: dict
 
 
+class LoginRequest(BaseModel):
+    slug: str
+    pin: str
+
+
 class SettingsUpdate(BaseModel):
     reminder_timezone: Optional[str] = None
     reminder_morning_hour: Optional[int] = None
@@ -188,6 +267,96 @@ class SettingsUpdate(BaseModel):
     reminders_enabled: Optional[bool] = None
     company_name: Optional[str] = None
     company_tagline: Optional[str] = None
+
+
+# ─── Auth endpoints ────────────────────────────────────────────────────────
+@app.get("/api/auth/status")
+def auth_status(request: Request):
+    """Check if auth is enabled, and if current session is valid."""
+    with get_db() as db:
+        enabled = auth_enabled(db)
+        token = request.cookies.get(SESSION_COOKIE)
+        slug = get_session_slug(db, token) if token else None
+        return {
+            "authEnabled": enabled,
+            "authenticated": slug is not None,
+            "slug": slug,
+        }
+
+
+@app.get("/api/auth/members")
+def auth_members():
+    """Return team member names for the login picker. Only names, no data."""
+    with get_db() as db:
+        rows = db.execute("SELECT slug, name FROM team ORDER BY created_at").fetchall()
+        return [{"slug": r["slug"], "name": r["name"]} for r in rows]
+
+
+@app.post("/api/auth/login")
+def login(req: LoginRequest, response: Response):
+    slug = req.slug.strip().lower()
+    pin = req.pin.strip()
+    with get_db() as db:
+        row = db.execute("SELECT name, pin_hash FROM team WHERE slug = ?", (slug,)).fetchone()
+        if not row:
+            raise HTTPException(status_code=401, detail="Invalid credentials")
+        if not row["pin_hash"]:
+            raise HTTPException(status_code=403, detail="No PIN set for this member. Ask admin to set one.")
+        if not verify_pin(pin, row["pin_hash"]):
+            raise HTTPException(status_code=401, detail="Invalid credentials")
+        token = create_session(db, slug)
+        response.set_cookie(
+            key=SESSION_COOKIE,
+            value=token,
+            max_age=SESSION_MAX_AGE,
+            httponly=True,
+            samesite="lax",
+            path="/",
+        )
+        return {"slug": slug, "name": row["name"]}
+
+
+@app.post("/api/auth/logout")
+def logout(request: Request, response: Response):
+    token = request.cookies.get(SESSION_COOKIE)
+    if token:
+        with get_db() as db:
+            db.execute("DELETE FROM sessions WHERE token = ?", (token,))
+            db.commit()
+    response.delete_cookie(key=SESSION_COOKIE, path="/")
+    return {"status": "logged out"}
+
+
+# ─── Auth middleware ──────────────────────────────────────────────────────
+# Public endpoints that don't need auth:
+PUBLIC_PATHS = {
+    "/api/auth/status",
+    "/api/auth/members",
+    "/api/auth/login",
+    "/api/auth/logout",
+    "/api/branding",
+    "/api/manifest.json",
+    "/api/push/vapid-public-key",
+}
+
+
+@app.middleware("http")
+async def auth_middleware(request: Request, call_next):
+    """Protect all /api/ routes (except public ones) when auth is enabled."""
+    path = request.url.path
+    if path.startswith("/api/") and path not in PUBLIC_PATHS:
+        with get_db() as db:
+            if auth_enabled(db):
+                token = request.cookies.get(SESSION_COOKIE)
+                slug = get_session_slug(db, token)
+                if not slug:
+                    return Response(
+                        content=json.dumps({"detail": "Not authenticated"}),
+                        status_code=401,
+                        media_type="application/json",
+                    )
+    response = await call_next(request)
+    return response
 
 
 # ─── Branding endpoints ──────────────────────────────────────────────────────
@@ -236,9 +405,10 @@ def add_member(member: TeamMember):
     name = member.name.strip()
     if not slug or not name:
         raise HTTPException(400, "Name and slug required")
+    ph = hash_pin(member.pin.strip()) if member.pin and member.pin.strip() else None
     with get_db() as db:
         try:
-            db.execute("INSERT INTO team (slug, name) VALUES (?, ?)", (slug, name))
+            db.execute("INSERT INTO team (slug, name, pin_hash) VALUES (?, ?, ?)", (slug, name, ph))
             db.commit()
         except sqlite3.IntegrityError:
             raise HTTPException(409, f"Member '{slug}' already exists")
@@ -252,8 +422,27 @@ def remove_member(slug: str):
         db.execute("DELETE FROM days WHERE slug = ?", (slug,))
         db.execute("DELETE FROM push_subscriptions WHERE slug = ?", (slug,))
         db.execute("DELETE FROM reminder_log WHERE slug = ?", (slug,))
+        db.execute("DELETE FROM sessions WHERE slug = ?", (slug,))
         db.commit()
     return {"deleted": slug}
+
+
+@app.put("/api/team/{slug}/pin")
+def set_pin(slug: str, request_body: dict):
+    """Set or reset a member's PIN. Called by StartOS actions."""
+    pin = request_body.get("pin", "").strip()
+    if not pin:
+        raise HTTPException(400, "PIN required")
+    ph = hash_pin(pin)
+    with get_db() as db:
+        row = db.execute("SELECT 1 FROM team WHERE slug = ?", (slug,)).fetchone()
+        if not row:
+            raise HTTPException(404, f"Member '{slug}' not found")
+        db.execute("UPDATE team SET pin_hash = ? WHERE slug = ?", (ph, slug))
+        # Invalidate existing sessions for this member
+        db.execute("DELETE FROM sessions WHERE slug = ?", (slug,))
+        db.commit()
+    return {"slug": slug, "pinSet": True}
 
 
 # ─── Day endpoints ───────────────────────────────────────────────────────────

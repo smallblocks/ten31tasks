@@ -55,6 +55,7 @@ const API = "/api";
 async function api(path, opts = {}) {
   const res = await fetch(`${API}${path}`, {
     headers: { "Content-Type": "application/json" },
+    credentials: "include",
     ...opts,
   });
   if (!res.ok) throw new Error(`API ${res.status}`);
@@ -467,6 +468,130 @@ function TeamManage({ team }) {
   );
 }
 
+// ─── Login Screen ───────────────────────────────────────────────────────────
+function LoginScreen({ members, branding, onLogin, themeMode, toggleTheme }) {
+  const [selectedSlug, setSelectedSlug] = useState(null);
+  const [pin, setPin] = useState("");
+  const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+  const pinRef = useRef(null);
+
+  const appTitle = branding.companyName ? `${branding.companyName.toUpperCase()} TASKS` : "TASKS";
+
+  const handleLogin = async () => {
+    if (!selectedSlug || !pin.trim()) return;
+    setSubmitting(true);
+    setError("");
+    try {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ slug: selectedSlug, pin: pin.trim() }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        onLogin(data.slug);
+      } else {
+        const err = await res.json().catch(() => ({}));
+        setError(err.detail || "Invalid PIN");
+      }
+    } catch (e) {
+      setError("Connection failed");
+    }
+    setSubmitting(false);
+  };
+
+  return (
+    <div style={{ background: BG, minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      <div style={{ maxWidth: 360, width: "100%" }}>
+        <div style={{ textAlign: "center", marginBottom: 40, position: "relative" }}>
+          <button onClick={toggleTheme} title={themeMode === 'dark' ? 'Light mode' : 'Dark mode'}
+            style={{ position: 'absolute', top: 0, right: 0, background: 'transparent', border: `1px solid ${BORDER}`, borderRadius: 4, padding: '4px 6px', cursor: 'pointer', color: TEXT_DIM, display: 'flex' }}>
+            {themeMode === 'dark' ? <SunIcon /> : <MoonIcon />}
+          </button>
+          <h1 style={{ fontFamily: SERIF, fontSize: 28, fontWeight: 700, color: WHITE, margin: 0, letterSpacing: "0.06em" }}>{appTitle}</h1>
+          <p style={{ fontFamily: MONO, fontSize: 10, color: GOLD, letterSpacing: "0.08em", marginTop: 6 }}>Sign in to continue</p>
+        </div>
+
+        {!selectedSlug ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            <label style={{ fontFamily: MONO, fontSize: 11, color: TEXT_DIM, letterSpacing: "0.04em", marginBottom: 4 }}>WHO ARE YOU?</label>
+            {members.map(m => (
+              <button key={m.slug} onClick={() => { setSelectedSlug(m.slug); setPin(""); setError(""); setTimeout(() => pinRef.current?.focus(), 100); }}
+                style={{
+                  display: "flex", alignItems: "center", gap: 12, padding: "14px 16px",
+                  background: SURFACE, border: `1px solid ${BORDER}`, borderRadius: 8,
+                  cursor: "pointer", textAlign: "left", width: "100%",
+                }}>
+                <div style={{
+                  width: 36, height: 36, borderRadius: 18, background: GOLD_DIM,
+                  display: "flex", alignItems: "center", justifyContent: "center",
+                  fontFamily: MONO, fontSize: 15, fontWeight: 600, color: GOLD,
+                  border: `1px solid ${GOLD}33`,
+                }}>{m.name.charAt(0).toUpperCase()}</div>
+                <span style={{ fontFamily: SANS, fontSize: 16, color: WHITE, fontWeight: 500 }}>{m.name}</span>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div>
+            <button onClick={() => { setSelectedSlug(null); setPin(""); setError(""); }}
+              style={{ background: "transparent", border: "none", color: TEXT_DIM, fontFamily: MONO, fontSize: 11, cursor: "pointer", padding: "0 0 16px", display: "flex", alignItems: "center", gap: 4 }}>
+              <ChevronLeft /> Back
+            </button>
+            <div style={{ textAlign: "center", marginBottom: 24 }}>
+              <div style={{
+                width: 56, height: 56, borderRadius: 28, background: GOLD_DIM,
+                display: "inline-flex", alignItems: "center", justifyContent: "center",
+                fontFamily: MONO, fontSize: 22, fontWeight: 600, color: GOLD,
+                border: `1px solid ${GOLD}33`, marginBottom: 10,
+              }}>{members.find(m => m.slug === selectedSlug)?.name.charAt(0).toUpperCase()}</div>
+              <div style={{ fontFamily: SANS, fontSize: 18, color: WHITE, fontWeight: 500 }}>
+                {members.find(m => m.slug === selectedSlug)?.name}
+              </div>
+            </div>
+            <div style={{ marginBottom: 16 }}>
+              <input
+                ref={pinRef}
+                type="password"
+                inputMode="numeric"
+                pattern="[0-9]*"
+                value={pin}
+                onChange={e => setPin(e.target.value)}
+                onKeyDown={e => { if (e.key === "Enter") handleLogin(); }}
+                placeholder="Enter PIN"
+                style={{
+                  width: "100%", padding: "14px 16px", background: SURFACE,
+                  border: `1px solid ${error ? '#8b3a3a' : BORDER}`, borderRadius: 8,
+                  color: WHITE, fontFamily: MONO, fontSize: 18, textAlign: "center",
+                  outline: "none", boxSizing: "border-box", letterSpacing: "0.2em",
+                }}
+              />
+            </div>
+            {error && <p style={{ fontFamily: MONO, fontSize: 11, color: "#c55", textAlign: "center", marginBottom: 12 }}>{error}</p>}
+            <button onClick={handleLogin} disabled={submitting || !pin.trim()}
+              style={{
+                width: "100%", padding: "12px", background: pin.trim() ? GOLD : SURFACE,
+                border: pin.trim() ? "none" : `1px solid ${BORDER}`, borderRadius: 8,
+                color: pin.trim() ? BG : TEXT_DIM, fontFamily: MONO, fontSize: 13, fontWeight: 600,
+                cursor: pin.trim() ? "pointer" : "default", letterSpacing: "0.04em",
+              }}>
+              {submitting ? "Signing in\u2026" : "Sign In"}
+            </button>
+          </div>
+        )}
+
+        <footer style={{ textAlign: "center", marginTop: 48 }}>
+          <p style={{ fontFamily: MONO, fontSize: 9, color: "#332e25", letterSpacing: "0.06em" }}>
+            {branding.tagline || ""}
+          </p>
+        </footer>
+      </div>
+    </div>
+  );
+}
+
 // ─── Main App ───────────────────────────────────────────────────────────────
 export default function App() {
   const [team, setTeam] = useState([]);
@@ -482,6 +607,8 @@ export default function App() {
   const [themeMode, setThemeMode] = useState(() => (typeof localStorage !== 'undefined' && localStorage.getItem('ten31-theme')) || 'dark');
   const inputRefs = useRef([]);
   const [branding, setBranding] = useState({ companyName: "", tagline: "" });
+  const [needsLogin, setNeedsLogin] = useState(false);
+  const [loginMembers, setLoginMembers] = useState([]);
 
   const toggleTheme = () => {
     const next = themeMode === 'dark' ? 'light' : 'dark';
@@ -489,37 +616,68 @@ export default function App() {
     setThemeMode(next);
   };
 
-  // ── Parse URL and load initial data ──
+  const loadAppData = useCallback(async (authSlug) => {
+    try {
+      const t = await api("/team");
+      setTeam(t);
+
+      const path = window.location.pathname;
+      const match = path.match(/\/list\/([a-z0-9-]+)/);
+      if (authSlug) {
+        // Auth gave us identity — go straight to their list
+        setCurrentUser(authSlug);
+        window.history.replaceState(null, "", `/list/${authSlug}`);
+        const days = await api(`/days/${authSlug}`);
+        setUserDays(days);
+      } else if (match) {
+        const slug = match[1];
+        if (t.find(m => m.slug === slug)) {
+          setCurrentUser(slug);
+          const days = await api(`/days/${slug}`);
+          setUserDays(days);
+        }
+      } else {
+        setShowHome(true);
+      }
+
+      const td = await api("/team/today");
+      setTeamData(td);
+    } catch (e) {
+      console.error("Failed to load:", e);
+    }
+    setLoading(false);
+  }, []);
+
+  // ── Check auth then load data ──
   useEffect(() => {
     (async () => {
       try {
-        const [t, b] = await Promise.all([api("/team"), api("/branding")]);
-        setTeam(t);
+        const b = await api("/branding");
         setBranding(b);
         document.title = `${b.companyName} Tasks`;
 
-        const path = window.location.pathname;
-        const match = path.match(/\/list\/([a-z0-9-]+)/);
-        if (match) {
-          const slug = match[1];
-          if (t.find(m => m.slug === slug)) {
-            setCurrentUser(slug);
-            const days = await api(`/days/${slug}`);
-            setUserDays(days);
-          }
-        } else {
-          // Root path — show homepage
-          setShowHome(true);
+        // Check auth status
+        const authRes = await fetch("/api/auth/status", { credentials: "include" });
+        const auth = await authRes.json();
+
+        if (auth.authEnabled && !auth.authenticated) {
+          // Need login
+          const members = await api("/auth/members");
+          setLoginMembers(members);
+          setNeedsLogin(true);
+          setLoading(false);
+          return;
         }
 
-        const td = await api("/team/today");
-        setTeamData(td);
+        // Authenticated or auth not enabled — load app
+        await loadAppData(auth.slug || null);
+
       } catch (e) {
         console.error("Failed to load:", e);
+        setLoading(false);
       }
-      setLoading(false);
     })();
-  }, []);
+  }, [loadAppData]);
 
   // ── Server-side save ──
   const saveDay = useCallback(async (slug, dateStr, dayData) => {
@@ -655,6 +813,23 @@ export default function App() {
       <div style={{ background: BG, minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center" }}>
         <p style={{ color: TEXT_DIM, fontFamily: MONO }}>Loading…</p>
       </div>
+    );
+  }
+
+  // ── Login gate ──
+  if (needsLogin) {
+    return (
+      <LoginScreen
+        members={loginMembers}
+        branding={branding}
+        onLogin={async (slug) => {
+          setNeedsLogin(false);
+          setLoading(true);
+          await loadAppData(slug);
+        }}
+        themeMode={themeMode}
+        toggleTheme={toggleTheme}
+      />
     );
   }
 
