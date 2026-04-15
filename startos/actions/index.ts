@@ -172,7 +172,96 @@ const listMembersAction = Action.withoutInput(
   },
 )
 
+// Set Timezone Action
+const setTimezoneAction = Action.withInput(
+  'set-timezone',
+  {
+    name: 'Set Timezone',
+    description: 'Set the timezone for reminders and daily task resets',
+    warning: null,
+    allowedStatuses: 'only-running',
+    group: null,
+    visibility: 'enabled',
+  },
+  InputSpec.of({
+    timezone: Value.select({
+      name: 'Timezone',
+      description: 'Select your timezone for reminder scheduling',
+      required: true,
+      default: 'America/Chicago',
+      values: {
+        'America/New_York': 'Eastern (US)',
+        'America/Chicago': 'Central (US)',
+        'America/Denver': 'Mountain (US)',
+        'America/Los_Angeles': 'Pacific (US)',
+        'America/Anchorage': 'Alaska',
+        'Pacific/Honolulu': 'Hawaii',
+        'America/Phoenix': 'Arizona (no DST)',
+        'America/Toronto': 'Eastern (Canada)',
+        'America/Winnipeg': 'Central (Canada)',
+        'America/Edmonton': 'Mountain (Canada)',
+        'America/Vancouver': 'Pacific (Canada)',
+        'America/Mexico_City': 'Mexico City',
+        'America/Sao_Paulo': 'São Paulo',
+        'America/Argentina/Buenos_Aires': 'Buenos Aires',
+        'Europe/London': 'London (GMT/BST)',
+        'Europe/Berlin': 'Berlin (CET)',
+        'Europe/Paris': 'Paris (CET)',
+        'Europe/Amsterdam': 'Amsterdam (CET)',
+        'Europe/Zurich': 'Zurich (CET)',
+        'Europe/Madrid': 'Madrid (CET)',
+        'Europe/Rome': 'Rome (CET)',
+        'Europe/Stockholm': 'Stockholm (CET)',
+        'Europe/Helsinki': 'Helsinki (EET)',
+        'Europe/Moscow': 'Moscow (MSK)',
+        'Asia/Dubai': 'Dubai (GST)',
+        'Asia/Kolkata': 'India (IST)',
+        'Asia/Singapore': 'Singapore (SGT)',
+        'Asia/Hong_Kong': 'Hong Kong (HKT)',
+        'Asia/Tokyo': 'Tokyo (JST)',
+        'Asia/Seoul': 'Seoul (KST)',
+        'Asia/Shanghai': 'Shanghai (CST)',
+        'Australia/Sydney': 'Sydney (AEST)',
+        'Australia/Melbourne': 'Melbourne (AEST)',
+        'Australia/Perth': 'Perth (AWST)',
+        'Pacific/Auckland': 'Auckland (NZST)',
+        'UTC': 'UTC',
+      },
+    }),
+  }),
+  async () => {
+    try {
+      const settings = await apiRequest('GET', '/api/settings')
+      return { timezone: settings.timezone || 'America/Chicago' }
+    } catch {
+      return { timezone: 'America/Chicago' }
+    }
+  },
+  async ({ input }) => {
+    try {
+      const result = await apiRequest('PUT', '/api/settings', {
+        reminder_timezone: input.timezone,
+      })
+
+      return {
+        version: '1' as const,
+        title: 'Timezone Updated',
+        message: `Timezone set to ${input.timezone}. Reminders will fire at the configured hours in this timezone.`,
+        result: null,
+      }
+    } catch (e) {
+      return {
+        version: '1' as const,
+        title: 'Error',
+        message: `Failed to set timezone: ${e}`,
+        result: null,
+      }
+    }
+  },
+)
+
 export const actions = sdk.Actions.of()
   .addAction(addMemberAction)
   .addAction(removeMemberAction)
   .addAction(listMembersAction)
+  .addAction(setTimezoneAction)
