@@ -1,0 +1,1 @@
+export declare const createBackup: import("@start9labs/start-sdk/base/lib/types").ExpectedExports.createBackup, restoreInit: import("@start9labs/start-sdk/base/lib/inits").InitScript<import("@start9labs/start-sdk/base/lib/inits").InitKind>;

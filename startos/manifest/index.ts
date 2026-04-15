@@ -1,13 +1,13 @@
 import { setupManifest } from '@start9labs/start-sdk'
 
 export const manifest = setupManifest({
-  id: 'ten31-tasks',
-  title: 'Team Tasks',
+  id: 'fold-tasks',
+  title: 'Fold Tasks',
   license: 'MIT',
   wrapperRepo: 'https://github.com/smallblocks/ten31tasks',
   upstreamRepo: 'https://github.com/smallblocks/ten31tasks',
   supportSite: 'https://github.com/smallblocks/ten31tasks/issues',
-  marketingSite: 'https://ten31.xyz',
+  marketingSite: 'https://foldapp.com',
   donationUrl: null,
   docsUrl: 'https://github.com/smallblocks/ten31tasks#readme',
   description: {
@@ -34,7 +34,7 @@ Features:
   volumes: ['main'],
   images: {
     main: {
-      source: { dockerTag: 'localhost/ten31-tasks:latest' },
+      source: { dockerTag: 'localhost/fold-tasks:latest' },
       arch: ['x86_64', 'aarch64'],
     },
   },

@@ -120,8 +120,8 @@ def init_db():
             "reminder_evening_hour": "20",
             "reminder_skip_weekends": "false",
             "reminders_enabled": "true",
-            "company_name": "Ten31",
-            "company_tagline": "Investing in Freedom Tech",
+            "company_name": "Fold",
+            "company_tagline": "Stack sats with every purchase",
         }
         for k, v in defaults.items():
             db.execute(
@@ -197,8 +197,8 @@ def get_branding():
         rows = db.execute("SELECT key, value FROM settings WHERE key IN ('company_name', 'company_tagline')").fetchall()
         s = {r["key"]: r["value"] for r in rows}
     return {
-        "companyName": s.get("company_name", "Ten31"),
-        "tagline": s.get("company_tagline", "Investing in Freedom Tech"),
+        "companyName": s.get("company_name", "Fold"),
+        "tagline": s.get("company_tagline", "Stack sats with every purchase"),
     }
 
 

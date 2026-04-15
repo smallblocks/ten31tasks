@@ -89,7 +89,7 @@ stdout_logfile=/dev/stdout
 stdout_logfile_maxbytes=0
 stderr_logfile=/dev/stderr
 stderr_logfile_maxbytes=0
-environment=DB_PATH="/data/ten31-tasks.db"
+environment=DB_PATH="/data/fold-tasks.db"
 
 [program:nginx]
 command=nginx -g "daemon off;"

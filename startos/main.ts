@@ -1,7 +1,7 @@
 import { sdk } from './sdk'
 
 export const main = sdk.setupMain(async ({ effects }) => {
-  console.info('Starting Team Tasks!')
+  console.info('Starting Fold Tasks!')
 
   const subcontainer = await sdk.SubContainer.of(
     effects,
@@ -12,7 +12,7 @@ export const main = sdk.setupMain(async ({ effects }) => {
       mountpoint: '/data',
       readonly: false,
     }),
-    'ten31-tasks-web',
+    'fold-tasks-web',
   )
 
   return sdk.Daemons.of(effects).addDaemon('primary', {
@@ -20,15 +20,15 @@ export const main = sdk.setupMain(async ({ effects }) => {
     exec: {
       command: ['supervisord', '-c', '/etc/supervisor/supervisord.conf'],
       env: {
-        DB_PATH: '/data/ten31-tasks.db',
+        DB_PATH: '/data/fold-tasks.db',
       },
     },
     ready: {
-      display: 'Team Tasks Ready',
+      display: 'Fold Tasks Ready',
       fn: () =>
         sdk.healthCheck.checkPortListening(effects, 80, {
-          successMessage: 'Team Tasks is ready',
-          errorMessage: 'Team Tasks is not responding',
+          successMessage: 'Fold Tasks is ready',
+          errorMessage: 'Fold Tasks is not responding',
         }),
     },
     requires: [],

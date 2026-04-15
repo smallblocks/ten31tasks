@@ -290,8 +290,8 @@ const setCompanyNameAction = Action.withInput(
     try {
       const branding = await apiRequest('GET', '/api/branding')
       return {
-        companyName: branding.companyName || 'Ten31',
-        tagline: branding.tagline || 'Investing in Freedom Tech',
+        companyName: branding.companyName || 'Fold',
+        tagline: branding.tagline || 'Stack sats with every purchase',
       }
     } catch {
       return { companyName: 'Ten31', tagline: 'Investing in Freedom Tech' }
@@ -307,7 +307,7 @@ const setCompanyNameAction = Action.withInput(
 
       await apiRequest('PUT', '/api/settings', body)
 
-      const displayName = (input.companyName || '').trim() || 'Ten31'
+      const displayName = (input.companyName || '').trim() || 'Fold'
       return {
         version: '1' as const,
         title: 'Company Name Updated',

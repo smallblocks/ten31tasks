@@ -9,7 +9,7 @@ export const setInterfaces = sdk.setupInterfaces(async ({ effects }) => {
   })
 
   const webUi = sdk.createInterface(effects, {
-    name: 'Team Tasks',
+    name: 'Fold Tasks',
     id: 'webui',
     description: 'Team daily task tracker',
     type: 'ui',
