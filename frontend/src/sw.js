@@ -8,14 +8,14 @@ self.addEventListener('push', (event) => {
   try {
     data = event.data.json();
   } catch {
-    data = { title: 'Ten31 Tasks', body: event.data.text() };
+    data = { title: 'Tasks', body: event.data.text() };
   }
 
   const options = {
     body: data.body || '',
     icon: '/icon-192.png',
     badge: '/icon-192.png',
-    tag: data.tag || 'ten31-tasks',
+    tag: data.tag || 'tasks',
     renotify: true,
     data: { url: data.url || '/' },
     actions: [
@@ -24,7 +24,7 @@ self.addEventListener('push', (event) => {
   };
 
   event.waitUntil(
-    self.registration.showNotification(data.title || 'Ten31 Tasks', options)
+    self.registration.showNotification(data.title || 'Tasks', options)
   );
 });
 

@@ -2,7 +2,7 @@ import { setupManifest } from '@start9labs/start-sdk'
 
 export const manifest = setupManifest({
   id: 'ten31-tasks',
-  title: 'Ten31 Tasks',
+  title: 'Team Tasks',
   license: 'MIT',
   wrapperRepo: 'https://github.com/smallblocks/ten31tasks',
   upstreamRepo: 'https://github.com/smallblocks/ten31tasks',
@@ -12,15 +12,18 @@ export const manifest = setupManifest({
   docsUrl: 'https://github.com/smallblocks/ten31tasks#readme',
   description: {
     short: 'Team daily task tracker — six things, in order',
-    long: `A self-hosted team productivity tool for Ten31.
+    long: `A self-hosted team productivity tool based on the Ivy Lee method.
 
 Each team member gets their own route (/list/<name>) and writes down the six most important things they need to accomplish tomorrow. Lock the list in. Work top-down. Check off as you go.
 
 The team board gives everyone full visibility into who has committed, what they're working on, and their completion rate — a natural feedback loop of accountability.
 
+Set your company name via the "Set Company Name" action to customize the branding.
+
 Auto-saves every keystroke to server-side SQLite. No save button.
 
 Features:
+- Customizable company branding via StartOS Actions
 - Per-user task lists at /list/<name>
 - Team board with full task visibility
 - Calendar heatmap with monthly stats

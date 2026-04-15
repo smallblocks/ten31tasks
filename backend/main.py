@@ -1,5 +1,5 @@
 """
-Ten31 Tasks — Backend API
+Team Tasks — Backend API
 FastAPI + SQLite + Web Push + Built-in Reminder Scheduler.
 Every mutation writes immediately. No save button.
 """
@@ -23,7 +23,7 @@ DB_PATH = os.environ.get("DB_PATH", "/data/ten31-tasks.db")
 VAPID_KEY_PATH = os.environ.get("VAPID_KEY_PATH", "/data/vapid")
 VAPID_CLAIMS_EMAIL = os.environ.get("VAPID_EMAIL", "mailto:admin@ten31.xyz")
 
-app = FastAPI(title="Ten31 Tasks", docs_url=None, redoc_url=None)
+app = FastAPI(title="Team Tasks", docs_url=None, redoc_url=None)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
 
 # ─── VAPID Keys ──────────────────────────────────────────────────────────────
@@ -120,6 +120,8 @@ def init_db():
             "reminder_evening_hour": "20",
             "reminder_skip_weekends": "false",
             "reminders_enabled": "true",
+            "company_name": "Ten31",
+            "company_tagline": "Investing in Freedom Tech",
         }
         for k, v in defaults.items():
             db.execute(
@@ -184,6 +186,40 @@ class SettingsUpdate(BaseModel):
     reminder_evening_hour: Optional[int] = None
     reminder_skip_weekends: Optional[bool] = None
     reminders_enabled: Optional[bool] = None
+    company_name: Optional[str] = None
+    company_tagline: Optional[str] = None
+
+
+# ─── Branding endpoints ──────────────────────────────────────────────────────
+@app.get("/api/branding")
+def get_branding():
+    with get_db() as db:
+        rows = db.execute("SELECT key, value FROM settings WHERE key IN ('company_name', 'company_tagline')").fetchall()
+        s = {r["key"]: r["value"] for r in rows}
+    return {
+        "companyName": s.get("company_name", "Ten31"),
+        "tagline": s.get("company_tagline", "Investing in Freedom Tech"),
+    }
+
+
+@app.get("/api/manifest.json")
+def get_manifest():
+    branding = get_branding()
+    name = branding["companyName"]
+    return {
+        "name": f"{name} Tasks",
+        "short_name": "Tasks",
+        "description": "Six things. In order. Starting with the first.",
+        "start_url": "/",
+        "display": "standalone",
+        "background_color": "#0c0b09",
+        "theme_color": "#0c0b09",
+        "orientation": "portrait-primary",
+        "icons": [
+            {"src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable"},
+            {"src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable"},
+        ],
+    }
 
 
 # ─── Team endpoints ──────────────────────────────────────────────────────────
@@ -328,6 +364,8 @@ def update_settings(updates: SettingsUpdate):
             "reminder_evening_hour": str(updates.reminder_evening_hour) if updates.reminder_evening_hour is not None else None,
             "reminder_skip_weekends": str(updates.reminder_skip_weekends).lower() if updates.reminder_skip_weekends is not None else None,
             "reminders_enabled": str(updates.reminders_enabled).lower() if updates.reminders_enabled is not None else None,
+            "company_name": updates.company_name,
+            "company_tagline": updates.company_tagline,
         }
         for k, v in mapping.items():
             if v is not None:
@@ -566,7 +604,7 @@ def _send_push_reminders(checkpoint=None):
                     "title": "📋 Commit your six",
                     "body": "What matters most today? Write your six tasks and lock them in.",
                     "url": f"/list/{slug}",
-                    "tag": f"ten31-{today_str}-morning",
+                    "tag": f"tasks-{today_str}-morning",
                 }
             elif checkpoint == "afternoon" and committed and total > 0 and done < total:
                 remaining = [i.get("text") for i in items if i.get("text") and not i.get("done")]
@@ -575,7 +613,7 @@ def _send_push_reminders(checkpoint=None):
                     "title": f"⏳ {done}/{total} done — keep going",
                     "body": f"Next up: {top}",
                     "url": f"/list/{slug}",
-                    "tag": f"ten31-{today_str}-afternoon",
+                    "tag": f"tasks-{today_str}-afternoon",
                 }
                 tag = "afternoon"
             elif checkpoint == "evening" and committed and total > 0 and done == total and not has_reflection:
@@ -583,7 +621,7 @@ def _send_push_reminders(checkpoint=None):
                     "title": "📝 Reflect on your day",
                     "body": "All tasks done — how'd today go? Write a quick reflection.",
                     "url": f"/list/{slug}",
-                    "tag": f"ten31-{today_str}-evening",
+                    "tag": f"tasks-{today_str}-evening",
                 }
                 tag = "evening"
             elif checkpoint is None:
@@ -593,7 +631,7 @@ def _send_push_reminders(checkpoint=None):
                         "title": "📋 Commit your six",
                         "body": "What matters most today?",
                         "url": f"/list/{slug}",
-                        "tag": f"ten31-{today_str}",
+                        "tag": f"tasks-{today_str}",
                     }
                     tag = "manual"
                 elif total > 0 and done < total:
@@ -603,7 +641,7 @@ def _send_push_reminders(checkpoint=None):
                         "title": f"⏳ {done}/{total} done",
                         "body": f"Next up: {top}",
                         "url": f"/list/{slug}",
-                        "tag": f"ten31-{today_str}",
+                        "tag": f"tasks-{today_str}",
                     }
                     tag = "manual"
                 else:

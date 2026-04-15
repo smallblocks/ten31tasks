@@ -1,6 +1,8 @@
-# Ten31 Tasks
+# Team Tasks
 
-A self-hosted team productivity tracker for [Start9](https://start9.com) StartOS.
+A self-hosted, white-label team productivity tracker for [Start9](https://start9.com) StartOS.
+
+Set your company name via the **Set Company Name** action in StartOS to customize the branding.
 
 ## Architecture
 

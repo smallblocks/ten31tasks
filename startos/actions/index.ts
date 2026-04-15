@@ -22,7 +22,7 @@ const addMemberAction = Action.withInput(
   'add-member',
   {
     name: 'Add Team Member',
-    description: 'Add a new team member to Ten31 Tasks',
+    description: 'Add a new team member',
     warning: null,
     allowedStatuses: 'only-running',
     group: null,
@@ -259,7 +259,72 @@ const setTimezoneAction = Action.withInput(
   },
 )
 
+// Set Company Name Action
+const setCompanyNameAction = Action.withInput(
+  'set-company-name',
+  {
+    name: 'Set Company Name',
+    description: 'Set the company name and tagline displayed throughout the app',
+    warning: null,
+    allowedStatuses: 'only-running',
+    group: null,
+    visibility: 'enabled',
+  },
+  InputSpec.of({
+    companyName: Value.text({
+      name: 'Company Name',
+      description: 'The company name shown in headers and footers (e.g., Ten31, Unchained, Strike)',
+      required: true,
+      placeholder: 'Ten31',
+      default: '',
+    }),
+    tagline: Value.text({
+      name: 'Tagline',
+      description: 'Short tagline shown in the footer (e.g., Investing in Freedom Tech)',
+      required: false,
+      placeholder: 'Investing in Freedom Tech',
+      default: '',
+    }),
+  }),
+  async () => {
+    try {
+      const branding = await apiRequest('GET', '/api/branding')
+      return {
+        companyName: branding.companyName || 'Ten31',
+        tagline: branding.tagline || 'Investing in Freedom Tech',
+      }
+    } catch {
+      return { companyName: 'Ten31', tagline: 'Investing in Freedom Tech' }
+    }
+  },
+  async ({ input }) => {
+    try {
+      const body: Record<string, string> = {}
+      if (input.companyName.trim()) body.company_name = input.companyName.trim()
+      if (input.tagline !== undefined) body.company_tagline = input.tagline.trim()
+
+      await apiRequest('PUT', '/api/settings', body)
+
+      const name = input.companyName.trim() || 'Ten31'
+      return {
+        version: '1' as const,
+        title: 'Company Name Updated',
+        message: `App will now display as "${name} Tasks". Refresh the browser to see the change.`,
+        result: null,
+      }
+    } catch (e) {
+      return {
+        version: '1' as const,
+        title: 'Error',
+        message: `Failed to update company name: ${e}`,
+        result: null,
+      }
+    }
+  },
+)
+
 export const actions = sdk.Actions.of()
+  .addAction(setCompanyNameAction)
   .addAction(addMemberAction)
   .addAction(removeMemberAction)
   .addAction(listMembersAction)

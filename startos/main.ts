@@ -1,7 +1,7 @@
 import { sdk } from './sdk'
 
 export const main = sdk.setupMain(async ({ effects }) => {
-  console.info('Starting Ten31 Tasks!')
+  console.info('Starting Team Tasks!')
 
   const subcontainer = await sdk.SubContainer.of(
     effects,
@@ -24,11 +24,11 @@ export const main = sdk.setupMain(async ({ effects }) => {
       },
     },
     ready: {
-      display: 'Ten31 Tasks Ready',
+      display: 'Team Tasks Ready',
       fn: () =>
         sdk.healthCheck.checkPortListening(effects, 80, {
-          successMessage: 'Ten31 Tasks is ready',
-          errorMessage: 'Ten31 Tasks is not responding',
+          successMessage: 'Team Tasks is ready',
+          errorMessage: 'Team Tasks is not responding',
         }),
     },
     requires: [],

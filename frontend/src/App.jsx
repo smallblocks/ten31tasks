@@ -61,6 +61,11 @@ async function api(path, opts = {}) {
   return res.json();
 }
 
+// ─── Branding Context ───────────────────────────────────────────────────────
+import { createContext, useContext } from "react";
+const BrandingContext = createContext({ companyName: "", tagline: "" });
+const useBranding = () => useContext(BrandingContext);
+
 // ─── Debounce helper ────────────────────────────────────────────────────────
 function useDebounce(fn, ms) {
   const timer = useRef(null);
@@ -185,6 +190,7 @@ function NotificationBell({ slug }) {
 
 // ─── Homepage ───────────────────────────────────────────────────────────────
 function Homepage({ team, onSelectMember, onGoTeam, themeMode, toggleTheme }) {
+  const { companyName, tagline } = useBranding();
   return (
     <div style={{ maxWidth: 640, margin: "0 auto", padding: "0 20px 80px" }}>
       <header style={{ paddingTop: 48, paddingBottom: 32, textAlign: "center", position: "relative" }}>
@@ -197,7 +203,7 @@ function Homepage({ team, onSelectMember, onGoTeam, themeMode, toggleTheme }) {
           }}>
           {themeMode === 'dark' ? <SunIcon /> : <MoonIcon />}
         </button>
-        <h1 style={{ fontFamily: SERIF, fontSize: 36, fontWeight: 700, color: WHITE, margin: 0, letterSpacing: "0.06em" }}>TEN31 TASKS</h1>
+        <h1 style={{ fontFamily: SERIF, fontSize: 36, fontWeight: 700, color: WHITE, margin: 0, letterSpacing: "0.06em" }}>{companyName.toUpperCase()} TASKS</h1>
         <p style={{ fontFamily: MONO, fontSize: 11, color: GOLD, letterSpacing: "0.08em", marginTop: 8 }}>Create. Prioritize. Accomplish.</p>
       </header>
 
@@ -242,7 +248,7 @@ function Homepage({ team, onSelectMember, onGoTeam, themeMode, toggleTheme }) {
       </section>
 
       <footer style={{ textAlign: "center", paddingTop: 24 }}>
-        <p style={{ fontFamily: MONO, fontSize: 9, color: "#332e25", letterSpacing: "0.06em" }}>TEN31 TASKS · Investing in Freedom Tech</p>
+        <p style={{ fontFamily: MONO, fontSize: 9, color: "#332e25", letterSpacing: "0.06em" }}>{companyName.toUpperCase()} TASKS · {tagline}</p>
       </footer>
     </div>
   );
@@ -475,6 +481,7 @@ export default function App() {
   const [showHome, setShowHome] = useState(false);
   const [themeMode, setThemeMode] = useState(() => (typeof localStorage !== 'undefined' && localStorage.getItem('ten31-theme')) || 'dark');
   const inputRefs = useRef([]);
+  const [branding, setBranding] = useState({ companyName: "", tagline: "" });
 
   const toggleTheme = () => {
     const next = themeMode === 'dark' ? 'light' : 'dark';
@@ -486,8 +493,10 @@ export default function App() {
   useEffect(() => {
     (async () => {
       try {
-        const t = await api("/team");
+        const [t, b] = await Promise.all([api("/team"), api("/branding")]);
         setTeam(t);
+        setBranding(b);
+        document.title = `${b.companyName} Tasks`;
 
         const path = window.location.pathname;
         const match = path.match(/\/list\/([a-z0-9-]+)/);
@@ -649,18 +658,23 @@ export default function App() {
     );
   }
 
+  const APP_TITLE = branding.companyName ? `${branding.companyName.toUpperCase()} TASKS` : "TASKS";
+  const APP_FOOTER = branding.tagline ? `${APP_TITLE} · ${branding.tagline}` : APP_TITLE;
+
   // ── Homepage (root path, no user selected) ──
   if (showHome && !currentUser) {
     return (
-      <div style={{ background: BG, minHeight: "100vh", color: TEXT, fontFamily: SANS, WebkitFontSmoothing: "antialiased" }}>
-        <Homepage
-          team={team}
-          onSelectMember={selectMemberFromHome}
-          onGoTeam={() => { setShowHome(false); setView("team"); }}
-          themeMode={themeMode}
-          toggleTheme={toggleTheme}
-        />
-      </div>
+      <BrandingContext.Provider value={branding}>
+        <div style={{ background: BG, minHeight: "100vh", color: TEXT, fontFamily: SANS, WebkitFontSmoothing: "antialiased" }}>
+          <Homepage
+            team={team}
+            onSelectMember={selectMemberFromHome}
+            onGoTeam={() => { setShowHome(false); setView("team"); }}
+            themeMode={themeMode}
+            toggleTheme={toggleTheme}
+          />
+        </div>
+      </BrandingContext.Provider>
     );
   }
 
@@ -680,7 +694,7 @@ export default function App() {
             <h1
               onClick={() => { setShowHome(true); setCurrentUser(null); setViewingMember(null); window.history.pushState(null, "", "/"); }}
               style={{ fontFamily: SERIF, fontSize: 26, fontWeight: 700, color: WHITE, margin: 0, letterSpacing: "0.06em", cursor: "pointer" }}>
-              TEN31 TASKS
+              {APP_TITLE}
             </h1>
             <span style={{ fontFamily: MONO, fontSize: 10, color: TEXT_DIM, letterSpacing: "0.04em" }}>Create. Prioritize. Accomplish.</span>
           </div>
@@ -936,7 +950,7 @@ export default function App() {
         )}
 
         <footer style={{ marginTop: 48, paddingTop: 24, borderTop: `1px solid ${BORDER}`, textAlign: "center" }}>
-          <p style={{ fontFamily: MONO, fontSize: 9, color: "#332e25", letterSpacing: "0.06em", margin: 0 }}>TEN31 TASKS · Investing in Freedom Tech</p>
+          <p style={{ fontFamily: MONO, fontSize: 9, color: "#332e25", letterSpacing: "0.06em", margin: 0 }}>{APP_FOOTER}</p>
         </footer>
       </div>
     </div>
