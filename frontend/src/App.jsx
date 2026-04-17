@@ -606,6 +606,8 @@ export default function App() {
   const [showHome, setShowHome] = useState(false);
   const [themeMode, setThemeMode] = useState(() => (typeof localStorage !== 'undefined' && localStorage.getItem('ten31-theme')) || 'dark');
   const inputRefs = useRef([]);
+  const carriedForwardRef = useRef({});  // tracks which dates already auto-carried
+  const [carryToast, setCarryToast] = useState(null);
   const [branding, setBranding] = useState({ companyName: "", tagline: "" });
   const [needsLogin, setNeedsLogin] = useState(false);
   const [loginMembers, setLoginMembers] = useState([]);
@@ -771,9 +773,37 @@ export default function App() {
 
   const setReflection = (val) => {
     if (!canEdit) return;
-    const d = structuredClone(activeDays[selectedDate] || blankDay());
+    const currentDay = activeDays[selectedDate] || blankDay();
+    const wasEmpty = !currentDay.reflection;
+    const d = structuredClone(currentDay);
     d.reflection = val;
     updateDay(selectedDate, d, false);
+
+    // Auto carry-forward on first keystroke into reflection
+    if (wasEmpty && val && !carriedForwardRef.current[selectedDate]) {
+      const unfinished = day.items.filter(i => i.text && !i.done);
+      if (unfinished.length > 0) {
+        carriedForwardRef.current[selectedDate] = true;
+        const tomorrow = shiftDay(selectedDate, 1);
+        const td = structuredClone(activeDays[tomorrow] || blankDay());
+        let carried = 0;
+        unfinished.forEach((item) => {
+          // Find first empty slot
+          const emptyIdx = td.items.findIndex(i => !i.text);
+          if (emptyIdx !== -1) {
+            td.items[emptyIdx].text = item.text;
+            td.items[emptyIdx].worked = false;
+            td.items[emptyIdx].done = false;
+            carried++;
+          }
+        });
+        if (carried > 0) {
+          updateDay(tomorrow, td, true);
+          setCarryToast(`${carried} task${carried > 1 ? 's' : ''} carried to tomorrow`);
+          setTimeout(() => setCarryToast(null), 3000);
+        }
+      }
+    }
   };
 
   const carryForward = () => {
@@ -860,7 +890,12 @@ export default function App() {
 
   return (
     <div style={{ background: BG, minHeight: "100vh", color: TEXT, fontFamily: SANS, WebkitFontSmoothing: "antialiased" }}>
-      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }`}</style>
+      <style>{`@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } } @keyframes fadeInOut { 0% { opacity: 0; transform: translateY(20px); } 10% { opacity: 1; transform: translateY(0); } 85% { opacity: 1; } 100% { opacity: 0; } }`}</style>
+      {carryToast && (
+        <div style={{ position: "fixed", bottom: 24, left: "50%", transform: "translateX(-50%)", background: GOLD, color: BG, fontFamily: MONO, fontSize: 12, fontWeight: 600, padding: "10px 20px", borderRadius: 8, zIndex: 9999, animation: "fadeInOut 3s ease", letterSpacing: "0.03em", whiteSpace: "nowrap" }}>
+          ↗ {carryToast}
+        </div>
+      )}
       <div style={{ maxWidth: 560, margin: "0 auto", padding: "0 20px 80px" }}>
 
         {/* Header */}
