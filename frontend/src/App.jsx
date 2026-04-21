@@ -798,8 +798,10 @@ export default function App() {
           }
         });
         if (carried > 0) {
+          td.locked = true;
+          td.lockedAt = new Date().toISOString();
           updateDay(tomorrow, td, true);
-          setCarryToast(`${carried} task${carried > 1 ? 's' : ''} carried to tomorrow`);
+          setCarryToast(`${carried} task${carried > 1 ? 's' : ''} carried & committed for tomorrow`);
           setTimeout(() => setCarryToast(null), 3000);
         }
       }
