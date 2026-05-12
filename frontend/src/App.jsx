@@ -399,29 +399,32 @@ function CalendarHeatmap({ days, selectedDate, onSelect }) {
 }
 
 // ─── Team Board ─────────────────────────────────────────────────────────────
-function TeamBoard({ teamData, onSelectMember }) {
+function TeamBoard({ teamData, onSelectMember, skipWeekends }) {
   const todayStr = today();
+  const todayWorkdayStr = skipWeekends ? todayWorkday() : todayStr;
+  const isWeekendToday = skipWeekends && isWeekend(todayStr);
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "0 4px", marginBottom: 8 }}>
-        <span style={{ fontFamily: MONO, fontSize: 11, color: TEXT_DIM, letterSpacing: "0.06em" }}>TODAY — {dayLabel(todayStr)}</span>
+        <span style={{ fontFamily: MONO, fontSize: 11, color: TEXT_DIM, letterSpacing: "0.06em" }}>{isWeekendToday ? `LAST WORKDAY — ${dayLabel(todayWorkdayStr)}` : `TODAY — ${dayLabel(todayStr)}`}</span>
         <span style={{ fontFamily: MONO, fontSize: 10, color: TEXT_DIM }}>{teamData.length} members</span>
       </div>
       {teamData.map(member => {
         const days = member.days || {};
-        const todayEntry = days[todayStr];
+        const todayEntry = days[todayWorkdayStr];
         const committed = todayEntry?.locked || false;
         const total = todayEntry ? todayEntry.items.filter(i => i.text).length : 0;
         const done = todayEntry ? todayEntry.items.filter(i => i.text && i.done).length : 0;
         const worked = todayEntry ? todayEntry.items.filter(i => i.text && (i.worked || i.done)).length : 0;
         const pct = total > 0 ? Math.round((done / total) * 100) : 0;
 
-        let streak = 0, d = todayStr;
-        while (days[d]?.locked) { streak++; d = shiftDay(d, -1); }
+        let streak = 0, d = todayWorkdayStr;
+        while (days[d]?.locked) { streak++; d = skipWeekends ? shiftWorkday(d, -1) : shiftDay(d, -1); }
 
         let weekDone = 0, weekTotal = 0;
-        for (let i = 0; i < 7; i++) {
-          const iso = shiftDay(todayStr, -i);
+        const weekDays = skipWeekends ? 5 : 7;
+        for (let i = 0; i < weekDays; i++) {
+          const iso = skipWeekends ? (i === 0 ? todayWorkdayStr : shiftWorkday(todayWorkdayStr, -i)) : shiftDay(todayStr, -i);
           const entry = days[iso];
           if (entry?.locked) {
             weekTotal += entry.items.filter(it => it.text).length;
@@ -452,7 +455,7 @@ function TeamBoard({ teamData, onSelectMember }) {
                 </div>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                <div style={{ fontFamily: MONO, fontSize: 10, color: TEXT_DIM }}>{weekDone} done / 7d</div>
+                <div style={{ fontFamily: MONO, fontSize: 10, color: TEXT_DIM }}>{weekDone} done / {skipWeekends ? '5d' : '7d'}</div>
                 {committed && pct === 100 && <span style={{ color: GOLD, fontSize: 16 }}>✦</span>}
               </div>
             </div>
@@ -636,6 +639,15 @@ export default function App() {
   const [currentUser, setCurrentUser] = useState(null);
   const [view, setView] = useState("day");
   const [selectedDate, setSelectedDate] = useState(today());
+
+  // When settings load and today is a weekend, snap to last workday
+  const settingsLoadedRef = useRef(false);
+  useEffect(() => {
+    if (!settingsLoadedRef.current && skipWeekends && isWeekend(today())) {
+      setSelectedDate(todayWorkday());
+    }
+    settingsLoadedRef.current = true;
+  }, [skipWeekends]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [viewingMember, setViewingMember] = useState(null);
@@ -647,6 +659,7 @@ export default function App() {
   const [branding, setBranding] = useState({ companyName: "", tagline: "" });
   const [needsLogin, setNeedsLogin] = useState(false);
   const [loginMembers, setLoginMembers] = useState([]);
+  const { skipWeekends } = useSettings();
 
   const toggleTheme = () => {
     const next = themeMode === 'dark' ? 'light' : 'dark';
@@ -758,7 +771,8 @@ export default function App() {
 
   const activeDays = viewingMember && viewingMember !== currentUser ? viewingDays : userDays;
   const day = activeDays[selectedDate] || blankDay();
-  const isToday_ = selectedDate === today();
+  const effectiveToday = skipWeekends ? todayWorkday() : today();
+  const isToday_ = selectedDate === effectiveToday;
   const canEdit = activeSlug === currentUser && !viewingMember;
 
   const updateDay = (dateStr, newDayData, immediate = false) => {
@@ -820,7 +834,7 @@ export default function App() {
       const unfinished = day.items.filter(i => i.text && !i.done);
       if (unfinished.length > 0) {
         carriedForwardRef.current[selectedDate] = true;
-        const tomorrow = shiftDay(selectedDate, 1);
+        const tomorrow = skipWeekends ? shiftWorkday(selectedDate, 1) : shiftDay(selectedDate, 1);
         const td = structuredClone(activeDays[tomorrow] || blankDay());
         let carried = 0;
         unfinished.forEach((item) => {
@@ -846,7 +860,7 @@ export default function App() {
 
   const carryForward = () => {
     if (!canEdit) return;
-    const tomorrow = shiftDay(selectedDate, 1);
+    const tomorrow = skipWeekends ? shiftWorkday(selectedDate, 1) : shiftDay(selectedDate, 1);
     const d = structuredClone(activeDays[tomorrow] || blankDay());
     const unfinished = day.items.filter(i => i.text && !i.done);
     unfinished.forEach((item, idx) => {
@@ -871,8 +885,11 @@ export default function App() {
 
 
   const calcStreak = (days) => {
-    let streak = 0, d = today();
-    while (days[d]?.locked) { streak++; d = shiftDay(d, -1); }
+    let streak = 0, d = skipWeekends ? todayWorkday() : today();
+    while (days[d]?.locked) {
+      streak++;
+      d = skipWeekends ? shiftWorkday(d, -1) : shiftDay(d, -1);
+    }
     return streak;
   };
 
@@ -1020,13 +1037,13 @@ export default function App() {
             )}
 
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 20 }}>
-              <button style={{ background: "transparent", border: "none", color: TEXT_DIM, cursor: "pointer", padding: 8, display: "flex" }} onClick={() => setSelectedDate(shiftDay(selectedDate, -1))}><ChevronLeft /></button>
+              <button style={{ background: "transparent", border: "none", color: TEXT_DIM, cursor: "pointer", padding: 8, display: "flex" }} onClick={() => setSelectedDate(skipWeekends ? shiftWorkday(selectedDate, -1) : shiftDay(selectedDate, -1))}><ChevronLeft /></button>
               <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
                 <span style={{ fontFamily: MONO, fontSize: 14, color: WHITE }}>{dayLabel(selectedDate)}</span>
                 {isToday_ && <span style={{ fontFamily: MONO, fontSize: 9, color: GOLD, border: `1px solid ${GOLD}44`, padding: "2px 8px", borderRadius: 3, letterSpacing: "0.08em" }}>TODAY</span>}
                 {day.locked && <span style={{ fontFamily: MONO, fontSize: 9, color: TEXT_DIM, display: "flex", alignItems: "center", gap: 4 }}><LockIcon /> Committed</span>}
               </div>
-              <button style={{ background: "transparent", border: "none", color: TEXT_DIM, cursor: "pointer", padding: 8, display: "flex" }} onClick={() => setSelectedDate(shiftDay(selectedDate, 1))}><ChevronRight /></button>
+              <button style={{ background: "transparent", border: "none", color: TEXT_DIM, cursor: "pointer", padding: 8, display: "flex" }} onClick={() => setSelectedDate(skipWeekends ? shiftWorkday(selectedDate, 1) : shiftDay(selectedDate, 1))}><ChevronRight /></button>
             </div>
 
             {streak > 0 && (
@@ -1173,7 +1190,7 @@ export default function App() {
         {view === "team" && (
           <>
             {teamData.length > 0 && (
-              <TeamBoard teamData={teamData} onSelectMember={async (slug) => {
+              <TeamBoard teamData={teamData} skipWeekends={skipWeekends} onSelectMember={async (slug) => {
                 if (!currentUser) {
                   // First tap identifies you — sets you as this user
                   setCurrentUser(slug);
@@ -1189,7 +1206,7 @@ export default function App() {
                   // Tapped yourself — go to your own editable view
                   setViewingMember(null);
                 }
-                setSelectedDate(today());
+                setSelectedDate(skipWeekends ? todayWorkday() : today());
                 setView("day");
               }} />
             )}
