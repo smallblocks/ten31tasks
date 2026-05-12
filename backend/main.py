@@ -16,6 +16,23 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import Optional
 
+
+# ─── Weekend / workday helpers ───────────────────────────────────────────────
+def is_workday(d: date, skip_weekends: bool) -> bool:
+    """Return True if *d* should be treated as an active workday."""
+    if not skip_weekends:
+        return True
+    return d.weekday() < 5  # Mon=0 … Fri=4
+
+
+def previous_workday(d: date, skip_weekends: bool) -> date:
+    """Return the most recent workday on or before *d*."""
+    if not skip_weekends:
+        return d
+    while d.weekday() >= 5:
+        d = d - timedelta(days=1)
+    return d
+
 from fastapi import Cookie, FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
@@ -138,6 +155,7 @@ def init_db():
             "reminder_afternoon_hour": "15",
             "reminder_evening_hour": "20",
             "reminder_skip_weekends": "false",
+            "skip_weekends": "true",
             "reminders_enabled": "true",
             "company_name": "Ten31",
             "company_tagline": "Investing in Freedom Tech",
@@ -147,6 +165,17 @@ def init_db():
                 "INSERT OR IGNORE INTO settings (key, value) VALUES (?, ?)",
                 (k, v)
             )
+
+        # Migrate reminder_skip_weekends → skip_weekends (one-time)
+        row = db.execute(
+            "SELECT value FROM settings WHERE key = 'reminder_skip_weekends'"
+        ).fetchone()
+        if row is not None:
+            db.execute(
+                "INSERT OR IGNORE INTO settings (key, value) VALUES ('skip_weekends', ?)",
+                (row["value"],),
+            )
+
         db.commit()
 
 
@@ -263,7 +292,8 @@ class SettingsUpdate(BaseModel):
     reminder_morning_hour: Optional[int] = None
     reminder_afternoon_hour: Optional[int] = None
     reminder_evening_hour: Optional[int] = None
-    reminder_skip_weekends: Optional[bool] = None
+    reminder_skip_weekends: Optional[bool] = None  # deprecated alias
+    skip_weekends: Optional[bool] = None
     reminders_enabled: Optional[bool] = None
     company_name: Optional[str] = None
     company_tagline: Optional[str] = None
@@ -544,12 +574,17 @@ def get_settings():
     with get_db() as db:
         rows = db.execute("SELECT key, value FROM settings").fetchall()
         settings = {r["key"]: r["value"] for r in rows}
+    # skip_weekends: prefer new key, fall back to old key, fall back to "true"
+    sw_raw = settings.get(
+        "skip_weekends",
+        settings.get("reminder_skip_weekends", "true"),
+    )
     return {
         "timezone": settings.get("reminder_timezone", "America/Chicago"),
         "morning_hour": int(settings.get("reminder_morning_hour", "9")),
         "afternoon_hour": int(settings.get("reminder_afternoon_hour", "15")),
         "evening_hour": int(settings.get("reminder_evening_hour", "20")),
-        "skip_weekends": settings.get("reminder_skip_weekends", "false") == "true",
+        "skip_weekends": sw_raw == "true",
         "reminders_enabled": settings.get("reminders_enabled", "true") == "true",
     }
 
@@ -557,16 +592,26 @@ def get_settings():
 @app.put("/api/settings")
 def update_settings(updates: SettingsUpdate):
     with get_db() as db:
-        mapping = {
+        mapping: dict[str, str | None] = {
             "reminder_timezone": updates.reminder_timezone,
             "reminder_morning_hour": str(updates.reminder_morning_hour) if updates.reminder_morning_hour is not None else None,
             "reminder_afternoon_hour": str(updates.reminder_afternoon_hour) if updates.reminder_afternoon_hour is not None else None,
             "reminder_evening_hour": str(updates.reminder_evening_hour) if updates.reminder_evening_hour is not None else None,
-            "reminder_skip_weekends": str(updates.reminder_skip_weekends).lower() if updates.reminder_skip_weekends is not None else None,
             "reminders_enabled": str(updates.reminders_enabled).lower() if updates.reminders_enabled is not None else None,
             "company_name": updates.company_name,
             "company_tagline": updates.company_tagline,
         }
+
+        # Handle skip_weekends (new canonical key)
+        if updates.skip_weekends is not None:
+            mapping["skip_weekends"] = str(updates.skip_weekends).lower()
+
+        # Deprecated alias: write through to both keys for compat
+        if updates.reminder_skip_weekends is not None:
+            val = str(updates.reminder_skip_weekends).lower()
+            mapping["reminder_skip_weekends"] = val
+            mapping.setdefault("skip_weekends", val)
+
         for k, v in mapping.items():
             if v is not None:
                 db.execute(
