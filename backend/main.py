@@ -625,6 +625,11 @@ def update_settings(updates: SettingsUpdate):
 # ─── Reminder endpoints ─────────────────────────────────────────────────────
 @app.get("/api/reminders/pending")
 def reminders_pending():
+    settings = get_settings()
+    skip_we = settings.get("skip_weekends", False)
+    if skip_we and not is_workday(date.today(), True):
+        return {"date": date.today().isoformat(), "pending": [], "all_clear": True}
+
     today_str = date.today().isoformat()
     with get_db() as db:
         members = db.execute("SELECT slug, name FROM team ORDER BY created_at").fetchall()
@@ -1000,7 +1005,12 @@ def start_reminder_scheduler():
 # ─── Bulk endpoint for team board ────────────────────────────────────────────
 @app.get("/api/team/today")
 def team_today():
-    today_str = date.today().isoformat()
+    settings = get_settings()
+    skip_we = settings.get("skip_weekends", False)
+    if skip_we and not is_workday(date.today(), True):
+        today_str = previous_workday(date.today(), True).isoformat()
+    else:
+        today_str = date.today().isoformat()
     with get_db() as db:
         members = db.execute("SELECT slug, name FROM team ORDER BY created_at").fetchall()
         result = []
