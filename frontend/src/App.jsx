@@ -292,7 +292,7 @@ function Homepage({ team, onSelectMember, onGoTeam, themeMode, toggleTheme }) {
 }
 
 // ─── Calendar Heatmap ───────────────────────────────────────────────────────
-function CalendarHeatmap({ days, selectedDate, onSelect }) {
+function CalendarHeatmap({ days, selectedDate, onSelect, skipWeekends }) {
   const d = new Date(selectedDate + "T12:00:00");
   const [calYear, setCalYear] = useState(d.getFullYear());
   const [calMonth, setCalMonth] = useState(d.getMonth());
@@ -313,6 +313,7 @@ function CalendarHeatmap({ days, selectedDate, onSelect }) {
   const getCellColor = (day) => {
     if (!day) return "transparent";
     const iso = isoFor(day);
+    if (skipWeekends && isWeekend(iso)) return "transparent";
     const entry = days[iso];
     if (!entry?.locked) return iso < todayStr ? RED_DIM : "transparent";
     const total = entry.items.filter(i => i.text).length;
@@ -335,6 +336,7 @@ function CalendarHeatmap({ days, selectedDate, onSelect }) {
   const monthStats = useMemo(() => {
     let committed = 0, totalDone = 0, totalTasks = 0, perfectDays = 0, workedDays = 0;
     for (let dd = 1; dd <= dim; dd++) {
+      if (skipWeekends && isWeekend(isoFor(dd))) continue;
       const entry = days[isoFor(dd)];
       if (entry?.locked) {
         committed++;
@@ -347,7 +349,7 @@ function CalendarHeatmap({ days, selectedDate, onSelect }) {
       }
     }
     return { committed, totalDone, totalTasks, perfectDays, workedDays };
-  }, [days, calYear, calMonth, dim]);
+  }, [days, calYear, calMonth, dim, skipWeekends]);
 
   return (
     <div style={{ marginBottom: 24 }}>
@@ -363,14 +365,16 @@ function CalendarHeatmap({ days, selectedDate, onSelect }) {
         {cells.map((day, i) => {
           const dot = getCompletionDot(day);
           const iso = isoFor(day);
+          const isWe = skipWeekends && iso && isWeekend(iso);
           return (
-            <button key={i} onClick={() => { if (day && onSelect) onSelect(iso); }}
+            <button key={i} onClick={() => { if (day && !isWe && onSelect) onSelect(iso); }}
               style={{
                 aspectRatio: "1", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 2,
                 background: day ? getCellColor(day) : "transparent",
-                border: iso === selectedDate ? `1.5px solid ${GOLD}` : iso === todayStr ? `1px solid ${TEXT_DIM}` : "1px solid transparent",
-                borderRadius: 6, color: day ? (iso === todayStr ? WHITE : days[iso]?.locked ? TEXT : TEXT_DIM) : "transparent",
-                fontFamily: MONO, fontSize: 12, cursor: day ? "pointer" : "default", padding: 0, position: "relative",
+                border: isWe ? "1px solid transparent" : iso === selectedDate ? `1.5px solid ${GOLD}` : iso === todayStr ? `1px solid ${TEXT_DIM}` : "1px solid transparent",
+                borderRadius: 6, color: day ? (isWe ? TEXT_DIM : iso === todayStr ? WHITE : days[iso]?.locked ? TEXT : TEXT_DIM) : "transparent",
+                fontFamily: MONO, fontSize: 12, cursor: day && !isWe ? "pointer" : "default", padding: 0, position: "relative",
+                opacity: isWe ? 0.4 : 1,
               }}>
               {day || ""}
               {dot && <div style={{ width: 4, height: 4, borderRadius: 2, background: dot, position: "absolute", bottom: 3 }} />}
@@ -1180,7 +1184,7 @@ export default function App() {
 
         {/* ═══ CALENDAR ═══ */}
         {view === "calendar" && activeSlug && (
-          <CalendarHeatmap days={activeDays} selectedDate={selectedDate} onSelect={(iso) => { setSelectedDate(iso); setView("day"); }} />
+          <CalendarHeatmap days={activeDays} selectedDate={selectedDate} onSelect={(iso) => { setSelectedDate(iso); setView("day"); }} skipWeekends={skipWeekends} />
         )}
         {view === "calendar" && !activeSlug && (
           <div style={{ textAlign: "center", padding: 40 }}><p style={{ fontFamily: MONO, fontSize: 13, color: TEXT_DIM }}>Select a user first.</p></div>
